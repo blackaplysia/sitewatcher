@@ -29,6 +29,7 @@ redis_hkey_url = 'url'
 redis_hkey_depth = 'depth'
 redis_hkey_link = 'link'
 redis_hkey_tag = 'tag'
+redis_hkey_site = 'site'
 
 def add_redis_name(name, resid):
     name_lower = name.lower()
@@ -199,9 +200,9 @@ class Site:
                     if cs is not None:
                         title = re.sub('[　 ]+', ' ', '::'.join(filter(lambda x: len(x) > 0, [s.strip() for s in cs])))
                     tag = title + (' ' if len(title) > 0 else '') + '---- ' + ref
-                    hash = hashlib.md5(tag.encode()).hexdigest()
+                    hash = hashlib.md5((self.resid + tag).encode()).hexdigest()
                     if hash not in ignored_links:
-                        links.update({hash: { 'name': title, 'link': ref, 'tag': tag }})
+                        links.update({hash: { 'site': self.resid, 'name': title, 'link': ref, 'tag': tag }})
         return links
 
     def make_link_set(self, url, depth, links):
@@ -264,13 +265,20 @@ class Site:
 
                     for h in latests:
                         add_redis_smember(self.resid, redis_skey_hashes, h)
+                        set_redis_value(h, redis_hkey_site, links[h]['site'])
                         set_redis_value(h, redis_hkey_name, links[h]['name'])
                         set_redis_value(h, redis_hkey_link, links[h]['link'])
                         set_redis_value(h, redis_hkey_tag, links[h]['tag'])
                         add_redis_smember(self.resid, redis_skey_latests, h)
+                        print('added: {}: {}'.format(h, links[h]))
 
                 for h in obsoletes:
                     remove_redis_smember(self.resid, redis_skey_hashes, h)
+                    delete_redis_value(h, redis_hkey_site, links[h]['site'])
+                    delete_redis_value(h, redis_hkey_name, links[h]['name'])
+                    delete_redis_value(h, redis_hkey_link, links[h]['link'])
+                    delete_redis_value(h, redis_hkey_tag, links[h]['tag'])
+                    print('removed: {}: {}'.format(h, links[h]))
 
                 logger.info('Updated {}'.format(self.name))
 
