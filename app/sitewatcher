@@ -12,6 +12,8 @@ from redis import Redis
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
+debug_mode = False
+
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
@@ -90,8 +92,8 @@ class Site:
             self.resid = hashlib.md5(self.name.encode()).hexdigest()
             self.url = None
             self.depth = None
-            self.hashes = None
-            self.latests = None
+            self.hashes = []
+            self.latests = []
             self.exists = False
         else:
             self.name = get_redis_value(self.resid, redis_hkey_name)
@@ -242,43 +244,46 @@ class Site:
         logger.info('Updating {}'.format(self.name))
 
         links = self.make_link_set(self.url, self.depth, {})
-        if links is not None:
+        if links is None:
+            logger.info('No links found {}'.format(self.name))
+        else:
             hashes = links.keys()
 
-            if self.hashes is None:
-                latests = hashes
-                obsoletes = []
-            else:
-                latests = list(set(hashes) - set(self.hashes))
-                obsoletes = list(set(self.hashes) - set(hashes))
+            latests = list(set(hashes) - set(self.hashes))
+            obsoletes = list(set(self.hashes) - set(hashes))
 
-            print('old: {}'.format(self.hashes))
-            print('new: {}'.format(hashes))
-            print('latests: {}'.format(latests))
-            print('obsoletes: {}'.format(obsoletes))
+            logger.debug('old: {}'.format(self.hashes))
+            logger.debug('new: {}'.format(hashes))
+            logger.debug('latests: {}'.format(latests))
+            logger.debug('obsoletes: {}'.format(obsoletes))
 
             if len(latests) == 0 and len(obsoletes) == 0:
                 logger.info('Not updated {}'.format(self.name))
             else:
                 if len(latests) > 0:
-                    flush_redis_smembers(self.resid, redis_skey_latests)
-
                     for h in latests:
                         add_redis_smember(self.resid, redis_skey_hashes, h)
                         set_redis_value(h, redis_hkey_site, links[h]['site'])
                         set_redis_value(h, redis_hkey_name, links[h]['name'])
                         set_redis_value(h, redis_hkey_link, links[h]['link'])
                         set_redis_value(h, redis_hkey_tag, links[h]['tag'])
-                        add_redis_smember(self.resid, redis_skey_latests, h)
-                        print('added: {}: {}'.format(h, links[h]))
+                        logger.debug('added: {} {}'.format(h, links[h]['tag']))
+
+                    if len(self.hashes) == 0:
+                        logger.info('First update {}'.format(self.name))
+                    else:
+                        flush_redis_smembers(self.resid, redis_skey_latests)
+                        for h in latests:
+                            add_redis_smember(self.resid, redis_skey_latests, h)
 
                 for h in obsoletes:
                     remove_redis_smember(self.resid, redis_skey_hashes, h)
-                    delete_redis_value(h, redis_hkey_site, links[h]['site'])
-                    delete_redis_value(h, redis_hkey_name, links[h]['name'])
-                    delete_redis_value(h, redis_hkey_link, links[h]['link'])
-                    delete_redis_value(h, redis_hkey_tag, links[h]['tag'])
-                    print('removed: {}: {}'.format(h, links[h]))
+                    obsolete_tag = get_redis_value(h, redis_hkey_tag)
+                    delete_redis_value(h, redis_hkey_site)
+                    delete_redis_value(h, redis_hkey_name)
+                    delete_redis_value(h, redis_hkey_link)
+                    delete_redis_value(h, redis_hkey_tag)
+                    logger.debug('removed: {} {}'.format(h, obsolete_tag))
 
                 logger.info('Updated {}'.format(self.name))
 
@@ -292,9 +297,12 @@ class Site:
         if self.hashes is not None:
             for h in self.hashes:
                 tag = get_redis_value(h, redis_hkey_tag)
-                print("{} {}".format(h, tag))
+                if debug_mode is True:
+                    print("{} {} {}".format(h, self.name, tag))
+                else:
+                    print("{} {}".format(self.name, tag))
 
-    def latest(self):
+    def print(self):
         if self.exists == False:
             logger.error('No such a site.')
             return False
@@ -302,7 +310,10 @@ class Site:
         if self.latests is not None:
             for h in self.latests:
                 tag = get_redis_value(h, redis_hkey_tag)
-                print("{} {}".format(h, tag))
+                if debug_mode is True:
+                    print("{} {} {}".format(h, self.name, tag))
+                else:
+                    print("{} {}".format(self.name, tag))
 
 class SiteList:
 
@@ -322,6 +333,18 @@ class SiteList:
             resid = get_redis_resid(s)
             name = get_redis_value(resid, redis_hkey_name)
             Site(name).update()
+
+    def print_all(self):
+        for s in self.site_name_list:
+            resid = get_redis_resid(s)
+            name = get_redis_value(resid, redis_hkey_name)
+            Site(name).print()
+
+    def links_all(self):
+        for s in self.site_name_list:
+            resid = get_redis_resid(s)
+            name = get_redis_value(resid, redis_hkey_name)
+            Site(name).links()
 
 if __name__ == '__main__':
 
@@ -349,10 +372,10 @@ if __name__ == '__main__':
     sp_rename.add_argument('new_name', nargs=1, metavar='NEW_NAME', help='new name')
     sp_update = sps.add_parser('update', help='update a site or all sites')
     sp_update.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
-    sp_links = sps.add_parser('links', help='show all links')
-    sp_links.add_argument('name', nargs=1, metavar='NAME', help='site name')
-    sp_latest = sps.add_parser('latest', help='show latest links')
-    sp_latest.add_argument('name', nargs=1, metavar='NAME', help='site name')
+    sp_links = sps.add_parser('links', help='print all links of a site or all sites')
+    sp_links.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
+    sp_print = sps.add_parser('print', help='print latest links of a site or all sites')
+    sp_print.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
     sp_list = sps.add_parser('list', help='list sites')
 
     if len(sys.argv) == 1:
@@ -360,10 +383,11 @@ if __name__ == '__main__':
         exit(0)
 
     args = parser.parse_args()
+    debug_mode = args.debug
 
     log_format = '%(levelname)s: %(message)s'
     log_level = logging.INFO
-    if args.debug is True:
+    if debug_mode is True:
         log_format = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
         log_level = logging.DEBUG
     console = logging.StreamHandler()
@@ -390,9 +414,15 @@ if __name__ == '__main__':
             Site(name).update()
     elif args.subparser_name == 'links':
         name = args.name[0].strip()
-        Site(name).links()
-    elif args.subparser_name == 'latest':
+        if name.lower() == 'all':
+            SiteList().links_all()
+        else:
+            Site(name).links()
+    elif args.subparser_name == 'print':
         name = args.name[0].strip()
-        Site(name).latest()
+        if name.lower() == 'all':
+            SiteList().print_all()
+        else:
+            Site(name).print()
     elif args.subparser_name == 'list':
         SiteList().list()
