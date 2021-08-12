@@ -335,7 +335,10 @@ class SiteList:
             name = get_redis_value(resid, redis_hkey_name)
             url = get_redis_value(resid, redis_hkey_url)
             depth = get_redis_value(resid, redis_hkey_depth)
-            print('{} {} {} {}'.format(resid, name, url, depth))
+            if debug_mode is True:
+                print('{} {} {} {}'.format(resid, name, url, depth))
+            else:
+                print('{} {} {}'.format(name, url, depth))
 
     def update_all(self):
         for s in self.site_name_list:
