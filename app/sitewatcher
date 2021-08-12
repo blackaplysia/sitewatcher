@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import difflib
+import filetype
 import hashlib
 import logging
 import os
@@ -30,6 +31,7 @@ redis_hkey_name = 'name'
 redis_hkey_url = 'url'
 redis_hkey_depth = 'depth'
 redis_hkey_link = 'link'
+redis_hkey_parent = 'parent'
 redis_hkey_tag = 'tag'
 redis_hkey_site = 'site'
 
@@ -105,15 +107,15 @@ class Site:
 
     def add(self, url, depth):
         if self.exists == True:
-            logger.error('Already exists.')
+            logger.error('already exists.')
             return False
 
         if url is None:
-            logger.error('Invalid url')
+            logger.error('invalid url')
             return False
 
         if depth < 1:
-            logger.error('Invalid depth')
+            logger.error('invalid depth')
             return False
 
         add_redis_name(self.name, self.resid)
@@ -125,7 +127,7 @@ class Site:
 
     def delete(self):
         if self.exists == False:
-            logger.error('No such a site.')
+            logger.error('{}: no such a site.'.format(self.name))
             return False
 
         delete_redis_name(self.name, self.resid)
@@ -134,7 +136,7 @@ class Site:
 
     def rename(self, new_name):
         if self.exists == False:
-            logger.error('No such a site.')
+            logger.error('{}: no such a site.'.format(self.name))
             return False
 
         old_name = self.name
@@ -142,57 +144,54 @@ class Site:
         rename_redis_name(old_name, self.name, self.resid)
         return True
 
-    def get_real_title(self, bs):
-        s = None
-        s_tag = bs.find('title')
-        s_ogp = bs.find('meta', attrs={'property': 'og:title'})
-        if s_ogp is not None:
-            s = s_ogp.get('content')
-        elif s_tag is not None:
-            s = s_tag.get_text()
-
-        if s is None or len(s) == 0:
-            return None
-        else:
-            return s
-
-    def get_title(self, title):
-        real_title = title['name']
-        url = title['link']
+    def get_title(self, name, url, parent_name):
+        title = name
         res = None
         try:
             res = requests.get(url)
         except requests.exceptions.InvalidSchema as e:
             logger.debug(e)
         except requests.exceptions.RequestException as e:
-            logger.warning('Failed to fetch {}'.format(url))
+            logger.warning('{}: failed to fetch {}'.format(self.name, url))
             logger.debug(e)
         except Exception as e:
-            logger.warning('Failed to fetch {}'.format(url))
+            logger.warning('{}: failed to fetch {}'.format(self.name, url))
             logger.debug(e)
 
         if res is not None:
             if res.status_code >= 400:
-                logger.warning('Failed to fetch {}. Status code={}'.format(url, res.status_code))
+                logger.warning('{}: failed to fetch {}. Status code={}'.format(self.name, url, res.status_code))
             else:
                 ftype = filetype.guess(res.content)
                 if ftype:
-                    real_title = '[' + ftype.extension + ']' + real_title
+                    if parent_name is None:
+                        parent_name = ""
+                    title = '[' + ftype.extension + ']' + parent_name + '::' + title
+                    logger.debug("name changed: {} -> {}".format(name, title))
                 else:
+                    real_title = None
                     enc = res.encoding if res.encoding != 'ISO-8859-1' else None
-                    bs = BeautifulSoup(content, 'html.parser', from_encoding=enc)
-                    real_title = get_real_title(bs)
+                    bs = BeautifulSoup(res.content, 'html.parser', from_encoding=enc)
+                    bs_tag = bs.find('title')
+                    bs_ogp = bs.find('meta', attrs={'property': 'og:title'})
+                    if bs_ogp is not None:
+                        real_title = bs_ogp.get('content')
+                    elif bs_tag is not None:
+                        real_title = bs_tag.get_text()
+                    if real_title is not None and len(real_title) > 0:
+                        title = title + '::' + real_title
+                    logger.debug("name changed: {} -> {}".format(name, title))
 
-        return real_title + (' ' if len(real_title) > 0 else '') + '---- ' + url
+        return title
 
-    def get_references(self, bs, url_base, ignored_links):
+    def get_references(self, bs, parent_url, links, parent=None):
         links = {}
         for t in bs.find_all('a'):
             ref = t.get('href')
             if ref is not None:
                 ref = ''.join(filter(lambda c: c >= ' ', ref))
-                if url_base is not None:
-                    ref = urljoin(url_base, ref)
+                if parent_url is not None:
+                    ref = urljoin(parent_url, ref)
                 if ref.startswith('javascript:'):
                     pass
                 elif ref.startswith('http://warp.da.ndl.go.jp/collections/'):
@@ -203,95 +202,101 @@ class Site:
                         title = re.sub('[　 ]+', ' ', '::'.join(filter(lambda x: len(x) > 0, [s.strip() for s in cs])))
                     tag = title + (' ' if len(title) > 0 else '') + '---- ' + ref
                     hash = hashlib.md5((self.resid + tag).encode()).hexdigest()
-                    if hash not in ignored_links:
-                        links.update({hash: { 'site': self.resid, 'name': title, 'link': ref, 'tag': tag }})
+                    if hash not in links:
+                        links.update({hash: { 'site': self.resid, 'parent': parent, 'name': title, 'link': ref, 'tag': tag }})
         return links
 
-    def make_link_set(self, url, depth, links):
+    def make_link_set(self, url, depth, links, parent=None):
 
         res = None
         try:
             res = requests.get(url)
         except requests.exceptions.RequestException as e:
-            logger.warning('Failed to fetch {} {}'.format(self.name, url))
+            logger.warning('{}: failed to fetch {}'.format(self.name, url))
             logger.debug(e)
             return None
         except Exception as e:
-            logger.warning('Failed to fetch {} {}'.format(self.name, url))
+            logger.warning('{}: failed to fetch {}'.format(self.name, url))
             logger.debug(e)
             return None
 
         if res.status_code >= 400:
-            logger.warning('Failed to fetch {} {}. Status code={}'.format(self.name, url, res.status_code))
+            logger.warning('{}: failed to fetch {}. Status code={}'.format(self.name, url, res.status_code))
             return None
 
         bs = BeautifulSoup(res.content, 'html.parser')
-        child_links = self.get_references(bs, url, links)
-        links.update(child_links)
+        children = self.get_references(bs, url, links, parent)
+        links.update(children)
 
         if depth > 1:
-            for l in child_links:
-                descendant_links = self.make_link_set(child_links[l]['link'], depth - 1, links)
+            for h in children:
+                descendant_links = self.make_link_set(children[h]['link'], depth - 1, links, h)
             links.update(descendant_links)
 
         return links
 
     def update(self):
         if self.exists == False:
-            logger.error('No such a site.')
+            logger.error('{}: no such a site.'.format(self.name))
             return False
-
-        logger.info('Updating {}'.format(self.name))
 
         links = self.make_link_set(self.url, self.depth, {})
         if links is None:
-            logger.info('No links found {}'.format(self.name))
+            logger.warning('{}: no links found'.format(self.name))
         else:
             hashes = links.keys()
 
             latests = list(set(hashes) - set(self.hashes))
             obsoletes = list(set(self.hashes) - set(hashes))
 
-            logger.debug('old: {}'.format(self.hashes))
-            logger.debug('new: {}'.format(hashes))
-            logger.debug('latests: {}'.format(latests))
-            logger.debug('obsoletes: {}'.format(obsoletes))
+            logger.debug('{}: old: {}'.format(self.name, self.hashes))
+            logger.debug('{}: new: {}'.format(self.name, hashes))
+            logger.debug('{}: latests: {}'.format(self.name, latests))
+            logger.debug('{}: obsoletes: {}'.format(self.name, obsoletes))
 
-            if len(latests) == 0 and len(obsoletes) == 0:
-                logger.info('Not updated {}'.format(self.name))
-            else:
-                if len(latests) > 0:
+            if len(latests) > 0:
+                for h in latests:
+                    parent_name = None
+                    parent = links[h]['parent']
+                    if parent is not None:
+                        parent_name = links[parent]['name']
+                    title = self.get_title(links[h]['name'], links[h]['link'], parent_name)
+                    if len(title) > 0:
+                        links[h]['name'] = title
+                        links[h]['tag'] = title + ' ---- ' + links[h]['link']
+                    add_redis_smember(self.resid, redis_skey_hashes, h)
+                    set_redis_value(h, redis_hkey_site, links[h]['site'])
+                    set_redis_value(h, redis_hkey_name, links[h]['name'])
+                    set_redis_value(h, redis_hkey_link, links[h]['link'])
+                    if links[h]['parent'] is not None:
+                        set_redis_value(h, redis_hkey_parent, links[h]['parent'])
+                    set_redis_value(h, redis_hkey_tag, links[h]['tag'])
+                    logger.debug('{}: added: {} {}'.format(self.name, h, links[h]['tag']))
+
+                if len(self.hashes) > 0:
+                    logger.debug('{}: first update'.format(self.name))
+                else:
+                    flush_redis_smembers(self.resid, redis_skey_latests)
                     for h in latests:
-                        add_redis_smember(self.resid, redis_skey_hashes, h)
-                        set_redis_value(h, redis_hkey_site, links[h]['site'])
-                        set_redis_value(h, redis_hkey_name, links[h]['name'])
-                        set_redis_value(h, redis_hkey_link, links[h]['link'])
-                        set_redis_value(h, redis_hkey_tag, links[h]['tag'])
-                        logger.debug('added: {} {}'.format(h, links[h]['tag']))
+                        add_redis_smember(self.resid, redis_skey_latests, h)
 
-                    if len(self.hashes) == 0:
-                        logger.info('First update {}'.format(self.name))
-                    else:
-                        flush_redis_smembers(self.resid, redis_skey_latests)
-                        for h in latests:
-                            add_redis_smember(self.resid, redis_skey_latests, h)
+                logger.info('{}: updated'.format(self.name))
 
-                for h in obsoletes:
-                    remove_redis_smember(self.resid, redis_skey_hashes, h)
-                    obsolete_tag = get_redis_value(h, redis_hkey_tag)
-                    delete_redis_value(h, redis_hkey_site)
-                    delete_redis_value(h, redis_hkey_name)
-                    delete_redis_value(h, redis_hkey_link)
-                    delete_redis_value(h, redis_hkey_tag)
-                    logger.debug('removed: {} {}'.format(h, obsolete_tag))
-
-                logger.info('Updated {}'.format(self.name))
+            for h in obsoletes:
+                remove_redis_smember(self.resid, redis_skey_hashes, h)
+                obsolete_tag = get_redis_value(h, redis_hkey_tag)
+                delete_redis_value(h, redis_hkey_site)
+                delete_redis_value(h, redis_hkey_name)
+                delete_redis_value(h, redis_hkey_link)
+                delete_redis_value(h, redis_hkey_parent)
+                delete_redis_value(h, redis_hkey_tag)
+                logger.debug('{}: removed: {} {}'.format(self.name, h, obsolete_tag))
 
         return True
 
     def links(self):
         if self.exists == False:
-            logger.error('No such a site.')
+            logger.error('{}: no such a site.'.format(self.name))
             return False
 
         if self.hashes is not None:
@@ -304,7 +309,7 @@ class Site:
 
     def print(self):
         if self.exists == False:
-            logger.error('No such a site.')
+            logger.error('{}: no such a site.'.format(self.name))
             return False
 
         if self.latests is not None:
