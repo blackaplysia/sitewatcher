@@ -273,7 +273,7 @@ class Site:
                     set_redis_value(h, redis_hkey_tag, links[h]['tag'])
                     logger.debug('{}: added: {} {}'.format(self.name, h, links[h]['tag']))
 
-                if len(self.hashes) > 0:
+                if len(self.hashes) == 0:
                     logger.debug('{}: first update'.format(self.name))
                 else:
                     flush_redis_smembers(self.resid, redis_skey_latests)
@@ -300,6 +300,8 @@ class Site:
             return False
 
         if self.hashes is not None:
+            if debug_mode is True:
+                print("links: {}".format(self.hashes))
             for h in self.hashes:
                 tag = get_redis_value(h, redis_hkey_tag)
                 if debug_mode is True:
@@ -313,6 +315,8 @@ class Site:
             return False
 
         if self.latests is not None:
+            if debug_mode is True:
+                print("latests: {}".format(self.latests))
             for h in self.latests:
                 tag = get_redis_value(h, redis_hkey_tag)
                 if debug_mode is True:
