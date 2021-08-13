@@ -251,12 +251,15 @@ class Site:
 
         url = get_redis_value(self.resid, redis_hkey_url)
         depth = int(get_redis_value(self.resid, redis_hkey_depth))
+        old_hashes = list(get_redis_smembers(self.resid, redis_skey_hashes))
+        if len(old_hashes) == 0:
+            logger.info('{}: first update'.format(self.name))
+
         links = self.make_link_set(url, depth, {})
         if links is None:
             logger.warning('{}: no links found'.format(self.name))
         else:
             hashes = links.keys()
-            old_hashes = list(get_redis_smembers(self.resid, redis_skey_hashes))
 
             latests = list(set(hashes) - set(old_hashes))
             obsoletes = list(set(old_hashes) - set(hashes))
@@ -285,9 +288,7 @@ class Site:
                     set_redis_value(h, redis_hkey_tag, links[h]['tag'])
                     logger.debug('{}: added: {} {}'.format(self.name, h, links[h]['tag']))
 
-                if len(old_hashes) == 0:
-                    logger.debug('{}: first update'.format(self.name))
-                else:
+                if len(old_hashes) > 0:
                     for h in latests:
                         add_redis_smember(self.resid, str(now), h)
 
@@ -355,7 +356,7 @@ class Site:
             logger.error('{}: no such a site'.format(self.name))
             return False
 
-        for seq in range(1, redis_lmax_updated):
+        for seq in range(0, redis_lmax_updated):
             updated = get_redis_list_value(self.resid, redis_lkey_updated, seq)
             if updated is not None:
                 hashes = list(get_redis_smembers(self.resid, updated))
