@@ -9,8 +9,9 @@ import re
 import requests
 import sys
 import time
-from redis import Redis
 from bs4 import BeautifulSoup
+from datetime import datetime
+from redis import Redis
 from urllib.parse import urljoin
 
 debug_mode = False
@@ -26,6 +27,9 @@ redis = Redis(host=redis_host, port=redis_port, decode_responses=True)
 redis_skey_index = 'index'
 redis_skey_hashes = 'hashes'
 redis_skey_latests = 'latests'
+
+redis_lkey_updated = 'updated'
+redis_lmax_updated = 10
 
 redis_hkey_name = 'name'
 redis_hkey_url = 'url'
@@ -71,6 +75,17 @@ def get_redis_value(resid, hkey):
 def delete_redis_value(resid, hkey):
     return redis.hdel(resid, hkey)
 
+def add_redis_list_value(resid, lkey, lvalue, max_length=0, auto_remove=False):
+    k = resid + '+' + lkey
+    redis.lpush(k, lvalue)
+    if max_length > 0 and redis.llen(k) > max_length:
+        removed_value = redis.rpop(k)
+        if auto_remove == True:
+            redis.delete(resid + '+' + removed_value)
+
+def get_redis_list_value(resid, lkey, index):
+    return redis.lindex(resid + '+' + lkey, index)
+
 def add_redis_smember(resid, skey, svalue):
     redis.sadd(resid + '+' + skey, svalue)
     redis.sadd(skey, svalue)
@@ -87,27 +102,18 @@ def get_redis_smembers(resid, skey):
 class Site:
 
     def __init__(self, name):
-        name = name
         self.name = name
         self.resid = get_redis_resid(self.name)
         if self.resid is None:
             self.resid = hashlib.md5(self.name.encode()).hexdigest()
-            self.url = None
-            self.depth = None
-            self.hashes = []
-            self.latests = []
             self.exists = False
         else:
             self.name = get_redis_value(self.resid, redis_hkey_name)
-            self.url = get_redis_value(self.resid, redis_hkey_url)
-            self.depth = int(get_redis_value(self.resid, redis_hkey_depth))
-            self.hashes = list(get_redis_smembers(self.resid, redis_skey_hashes))
-            self.latests = list(get_redis_smembers(self.resid, redis_skey_latests))
             self.exists = True
 
     def add(self, url, depth):
         if self.exists == True:
-            logger.error('already exists.')
+            logger.error('already exists')
             return False
 
         if url is None:
@@ -127,7 +133,7 @@ class Site:
 
     def delete(self):
         if self.exists == False:
-            logger.error('{}: no such a site.'.format(self.name))
+            logger.error('{}: no such a site'.format(self.name))
             return False
 
         delete_redis_name(self.name, self.resid)
@@ -136,7 +142,7 @@ class Site:
 
     def rename(self, new_name):
         if self.exists == False:
-            logger.error('{}: no such a site.'.format(self.name))
+            logger.error('{}: no such a site'.format(self.name))
             return False
 
         old_name = self.name
@@ -165,9 +171,9 @@ class Site:
                 ftype = filetype.guess(res.content)
                 if ftype:
                     if parent_name is None:
-                        parent_name = ""
+                        parent_name = ''
                     title = '[' + ftype.extension + ']' + parent_name + '::' + title
-                    logger.debug("name changed: {} -> {}".format(name, title))
+                    logger.debug('title: {} -> {}'.format(name, title))
                 else:
                     real_title = None
                     enc = res.encoding if res.encoding != 'ISO-8859-1' else None
@@ -180,7 +186,7 @@ class Site:
                         real_title = bs_tag.get_text()
                     if real_title is not None and len(real_title) > 0:
                         title = title + '::' + real_title
-                    logger.debug("name changed: {} -> {}".format(name, title))
+                    logger.debug('title: {} -> {}'.format(name, title))
 
         return title
 
@@ -235,21 +241,27 @@ class Site:
 
         return links
 
-    def update(self):
+    def update(self, now=None):
         if self.exists == False:
-            logger.error('{}: no such a site.'.format(self.name))
+            logger.error('{}: no such a site'.format(self.name))
             return False
 
-        links = self.make_link_set(self.url, self.depth, {})
+        if now is None:
+            now = time.time()
+
+        url = get_redis_value(self.resid, redis_hkey_url)
+        depth = int(get_redis_value(self.resid, redis_hkey_depth))
+        links = self.make_link_set(url, depth, {})
         if links is None:
             logger.warning('{}: no links found'.format(self.name))
         else:
             hashes = links.keys()
+            old_hashes = list(get_redis_smembers(self.resid, redis_skey_hashes))
 
-            latests = list(set(hashes) - set(self.hashes))
-            obsoletes = list(set(self.hashes) - set(hashes))
+            latests = list(set(hashes) - set(old_hashes))
+            obsoletes = list(set(old_hashes) - set(hashes))
 
-            logger.debug('{}: old: {}'.format(self.name, self.hashes))
+            logger.debug('{}: old: {}'.format(self.name, old_hashes))
             logger.debug('{}: new: {}'.format(self.name, hashes))
             logger.debug('{}: latests: {}'.format(self.name, latests))
             logger.debug('{}: obsoletes: {}'.format(self.name, obsoletes))
@@ -273,14 +285,13 @@ class Site:
                     set_redis_value(h, redis_hkey_tag, links[h]['tag'])
                     logger.debug('{}: added: {} {}'.format(self.name, h, links[h]['tag']))
 
-                if len(self.hashes) == 0:
+                if len(old_hashes) == 0:
                     logger.debug('{}: first update'.format(self.name))
                 else:
-                    flush_redis_smembers(self.resid, redis_skey_latests)
                     for h in latests:
-                        add_redis_smember(self.resid, redis_skey_latests, h)
+                        add_redis_smember(self.resid, str(now), h)
 
-                logger.info('{}: updated'.format(self.name))
+                print('{}: updated'.format(self.name))
 
             for h in obsoletes:
                 remove_redis_smember(self.resid, redis_skey_hashes, h)
@@ -292,37 +303,89 @@ class Site:
                 delete_redis_value(h, redis_hkey_tag)
                 logger.debug('{}: removed: {} {}'.format(self.name, h, obsolete_tag))
 
+        add_redis_list_value(self.resid, redis_lkey_updated, str(now), redis_lmax_updated, True)
+        logger.debug('{}: updated: {}'.format(self.name, now))
+
+        return True
+
+    def show(self):
+        if self.exists == False:
+            logger.error('{}: no such a site'.format(self.name))
+            return False
+
+        url = get_redis_value(self.resid, redis_hkey_url)
+        depth = int(get_redis_value(self.resid, redis_hkey_depth))
+        print('Site: {} {}\n  URL: {}\n  Depth: {}'.format(self.resid, self.name, url, depth))
+
+        hashes = list(get_redis_smembers(self.resid, redis_skey_hashes))
+        for h in hashes:
+            n = get_redis_value(h,redis_hkey_name)
+            l = get_redis_value(h, redis_hkey_link)
+            t = get_redis_value(h, redis_hkey_tag)
+            print('Hash: {} {}\n  Link: {}\n  Tag: {}'.format(h, n, l, t))
+            sh = get_redis_value(h, redis_hkey_site)
+            if sh is not None:
+                sn = get_redis_value(sh, redis_hkey_name)
+                print('  Site: {} {}'.format(sh, sn))
+            ph = get_redis_value(h, redis_hkey_parent)
+            if ph is not None:
+                pn = get_redis_value(ph, redis_hkey_name)
+                print('  Parent: {} {}'.format(ph, pn))
+
         return True
 
     def links(self):
         if self.exists == False:
-            logger.error('{}: no such a site.'.format(self.name))
+            logger.error('{}: no such a site'.format(self.name))
             return False
 
-        if self.hashes is not None:
+        hashes = list(get_redis_smembers(self.resid, redis_skey_hashes))
+        if old_hashes is not None:
             if debug_mode is True:
-                print("links: {}".format(self.hashes))
-            for h in self.hashes:
+                print('links: {}'.format(hashes))
+            for h in hashes:
                 tag = get_redis_value(h, redis_hkey_tag)
                 if debug_mode is True:
-                    print("{} {} {}".format(h, self.name, tag))
+                    print('{} {} {}'.format(h, self.name, tag))
                 else:
-                    print("{} {}".format(self.name, tag))
+                    print('{} {}'.format(self.name, tag))
 
-    def print(self):
+    def sequences(self):
         if self.exists == False:
-            logger.error('{}: no such a site.'.format(self.name))
+            logger.error('{}: no such a site'.format(self.name))
             return False
 
-        if self.latests is not None:
-            if debug_mode is True:
-                print("latests: {}".format(self.latests))
-            for h in self.latests:
-                tag = get_redis_value(h, redis_hkey_tag)
-                if debug_mode is True:
-                    print("{} {} {}".format(h, self.name, tag))
+        for seq in range(1, redis_lmax_updated):
+            updated = get_redis_list_value(self.resid, redis_lkey_updated, seq)
+            if updated is not None:
+                hashes = list(get_redis_smembers(self.resid, updated))
+                if hashes is None:
+                    population = 0
                 else:
-                    print("{} {}".format(self.name, tag))
+                    population = len(hashes)
+                updated_isotimestamp = datetime.utcfromtimestamp(float(updated)).isoformat()
+                print('{} {} {} {}'.format(seq, population, updated, updated_isotimestamp))
+
+    def print(self, sequence):
+        if self.exists == False:
+            logger.error('{}: no such a site'.format(self.name))
+            return False
+
+        updated = get_redis_list_value(self.resid, redis_lkey_updated, sequence)
+        if updated is not None:
+            hashes = list(get_redis_smembers(self.resid, updated))
+            if debug_mode is True:
+                updated_isotimestamp = datetime.utcfromtimestamp(float(updated)).isoformat()
+                print('updated: {} {}'.format(updated, updated_isotimestamp))
+            if hashes is not None:
+                if debug_mode is True:
+                    print('hashes: {}'.format(hashes))
+                for h in hashes:
+                    tag = get_redis_value(h, redis_hkey_tag)
+                    if debug_mode is True:
+                        print('{} {} {}'.format(h, self.name, tag))
+                    else:
+                        print('{} {}'.format(self.name, tag))
 
 class SiteList:
 
@@ -341,22 +404,29 @@ class SiteList:
                 print('{} {} {}'.format(name, url, depth))
 
     def update_all(self):
+        now = time.time()
         for s in self.site_name_list:
             resid = get_redis_resid(s)
             name = get_redis_value(resid, redis_hkey_name)
-            Site(name).update()
+            Site(name).update(now)
 
-    def print_all(self):
+    def print_all(self, sequence):
         for s in self.site_name_list:
             resid = get_redis_resid(s)
             name = get_redis_value(resid, redis_hkey_name)
-            Site(name).print()
+            Site(name).print(sequence)
 
     def links_all(self):
         for s in self.site_name_list:
             resid = get_redis_resid(s)
             name = get_redis_value(resid, redis_hkey_name)
             Site(name).links()
+
+    def sequences_all(self):
+        for s in self.site_name_list:
+            resid = get_redis_resid(s)
+            name = get_redis_value(resid, redis_hkey_name)
+            Site(name).sequences()
 
 if __name__ == '__main__':
 
@@ -382,12 +452,17 @@ if __name__ == '__main__':
     sp_rename = sps.add_parser('rename', help='rename a site')
     sp_rename.add_argument('name', nargs=1, metavar='NAME', help='site name')
     sp_rename.add_argument('new_name', nargs=1, metavar='NEW_NAME', help='new name')
+    sp_show = sps.add_parser('show', help='show a site related data')
+    sp_show.add_argument('name', nargs=1, metavar='NAME', help='site name')
     sp_update = sps.add_parser('update', help='update a site or all sites')
     sp_update.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
     sp_links = sps.add_parser('links', help='print all links of a site or all sites')
     sp_links.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
     sp_print = sps.add_parser('print', help='print latest links of a site or all sites')
     sp_print.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
+    sp_print.add_argument('--sequence', '-s', default='0', metavar='N', help='time sequence number (latest=0)')
+    sp_sequences = sps.add_parser('sequences', help='list time sequences')
+    sp_sequences.add_argument('name', nargs=1, metavar='NAME', help='site name')
     sp_list = sps.add_parser('list', help='list sites')
 
     if len(sys.argv) == 1:
@@ -418,6 +493,9 @@ if __name__ == '__main__':
     elif args.subparser_name == 'rename':
         name = args.name[0].strip()
         Site(name).rename(args.new_name[0])
+    elif args.subparser_name == 'show':
+        name = args.name[0].strip()
+        Site(name).show()
     elif args.subparser_name == 'update':
         name = args.name[0].strip()
         if name.lower() == 'all':
@@ -432,9 +510,16 @@ if __name__ == '__main__':
             Site(name).links()
     elif args.subparser_name == 'print':
         name = args.name[0].strip()
+        seq = args.sequence
         if name.lower() == 'all':
-            SiteList().print_all()
+            SiteList().print_all(seq)
         else:
-            Site(name).print()
+            Site(name).print(seq)
+    elif args.subparser_name == 'sequences':
+        name = args.name[0].strip()
+        if name.lower() == 'all':
+            SiteList().sequences_all()
+        else:
+            Site(name).sequences()
     elif args.subparser_name == 'list':
         SiteList().list()
