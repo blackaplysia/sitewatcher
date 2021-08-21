@@ -30,6 +30,7 @@ json_section_updated = 'updated'
 json_section_links = 'links'
 
 redis_skey_index = 'index'
+redis_skey_ignores = 'ignores'
 redis_skey_hashes = 'hashes'
 redis_skey_latests = 'latests'
 
@@ -75,6 +76,15 @@ def get_redis_resid(name):
     name_lower = name.lower()
     return redis.get(name_lower)
 
+def add_redis_ignores(link):
+    redis.sadd(redis_skey_ignores, link)
+
+def remove_redis_ignores(link):
+    redis.srem(redis_skey_ignores, link)
+
+def get_redis_ignores():
+    return redis.smembers(redis_skey_ignores)
+
 def set_redis_value(resid, hkey, hvalue):
     redis.hset(resid, hkey, hvalue)
 
@@ -106,7 +116,7 @@ def delete_redis_list(resid, lkey):
 
 def add_redis_smember(resid, skey, svalue):
     redis.sadd(resid + '+' + skey, svalue)
-    redis.sadd(skey, svalue)
+    # redis.sadd(skey, svalue)
 
 def remove_redis_smember(resid, skey, svalue):
     redis.srem(resid + '+' + skey, svalue)
@@ -196,9 +206,9 @@ def load_redis_data(data):
             print('rpush {}, {}'.format(resid + '+' + redis_lkey_updated, dt))
             for uh in sequence[dt]:
                 redis.sadd(resid + '+' + dt, uh)
-                redis.sadd(dt, uh)
+                #redis.sadd(dt, uh)
                 print('sadd {}, {}'.format(resid + '+' + dt, uh))
-                print('sadd {}, {}'.format(dt, uh))
+                #print('sadd {}, {}'.format(dt, uh))
 
         links = data[site][json_section_links]
         for h in links:
@@ -285,23 +295,33 @@ class Site:
         rename_redis_name(old_name, self.name, self.resid)
         return True
 
-    def config(self, link, depth):
+    def config(self, linkv=None, depthv=None, ignoresv=None, recognizev=None):
         if self.exists == False:
             logger.error('{}: no such a site'.format(self.name))
             return False
 
-        if link is not None:
-            set_redis_value(self.resid, redis_hkey_link, link)
-
-        if depth is not None:
-            set_redis_value(self.resid, redis_hkey_depth, depth)
+        if linkv is not None:
+            set_redis_value(self.resid, redis_hkey_link, linkv[0])
+        if depthv is not None:
+            set_redis_value(self.resid, redis_hkey_depth, depthv[0])
+        if ignoresv is not None:
+            for i in ignoresv:
+                add_redis_smember(self.resid, redis_skey_ignores, i)
+        if recognizev is not None:
+            for r in recognizev:
+                remove_redis_smember(self.resid, redis_skey_ignores, r)
 
         link = get_redis_value(self.resid, redis_hkey_link)
         depth = get_redis_value(self.resid, redis_hkey_depth)
+        ignores = get_redis_smembers(self.resid, redis_skey_ignores)
         if debug_mode is True:
             print('{} {} {} {}'.format(self.resid, self.name, link, depth))
+            for i in ignores:
+                print('{} {} ignores {}'.format(self.resid, self.name, i))
         else:
             print('{} {} {}'.format(self.name, link, depth))
+            for i in ignores:
+                print('{} ignores {}'.format(self.name, i))
 
         return True
 
@@ -354,8 +374,8 @@ class Site:
 
         return title
 
-    def get_references(self, bs, parent_hash, parent_link, links):
-        links = {}
+    def get_references(self, bs, parent_hash, parent_link, links, ignores):
+        children = {}
         for t in bs.find_all('a'):
             ref = t.get('href')
             if ref is not None:
@@ -372,21 +392,28 @@ class Site:
                     pass
                 elif ref_lower.startswith('javascript:'):
                     pass
-                elif ref_lower.startswith('http://warp.da.ndl.go.jp/collections/'):
-                    pass
                 else:
                     if parent_link is not None:
                         ref = urljoin(parent_link, ref)
-                    cs = t.strings
-                    if cs is not None:
-                        title = re.sub('[　 ]+', ' ', '::'.join(filter(lambda x: len(x) > 0, [s.strip() for s in cs])))
-                    tag = title + (' ' if len(title) > 0 else '') + '---- ' + ref
-                    hash = hashlib.md5((self.resid + tag).encode()).hexdigest()
-                    if hash not in links:
-                        links.update({hash: { 'site': self.resid, 'parent': parent_hash, 'name': title, 'link': ref, 'tag': tag }})
-        return links
+                        ref_lower = ref.lower()
+                    is_ignored = False
+                    if ignores is not None:
+                        for i in ignores:
+                            if ref_lower.startswith(i):
+                                is_ignored = True
+                                logger.debug('{} ignores {} which matches {}'.format(self.name, ref_lower, i))
+                                break
+                    if is_ignored is False:
+                        cs = t.strings
+                        if cs is not None:
+                            title = re.sub('[　 ]+', ' ', '::'.join(filter(lambda x: len(x) > 0, [s.strip() for s in cs])))
+                        tag = title + (' ' if len(title) > 0 else '') + '---- ' + ref
+                        hash = hashlib.md5((self.resid + tag).encode()).hexdigest()
+                        if hash not in links:
+                            children.update({hash: { 'site': self.resid, 'parent': parent_hash, 'name': title, 'link': ref, 'tag': tag }})
+        return children
 
-    def make_link_set(self, hash, link, depth, links):
+    def make_link_set(self, hash, link, depth, links, ignores):
 
         res = None
         try:
@@ -405,12 +432,12 @@ class Site:
             return None
 
         bs = BeautifulSoup(res.content, 'html.parser')
-        children = self.get_references(bs, hash, link, links)
+        children = self.get_references(bs, hash, link, links, ignores)
         links.update(children)
 
         if depth > 1:
             for h in children:
-                descendant_links = self.make_link_set(h, children[h]['link'], depth - 1, links)
+                descendant_links = self.make_link_set(h, children[h]['link'], depth - 1, links, ignores)
                 if descendant_links is not None:
                     links.update(descendant_links)
 
@@ -429,9 +456,16 @@ class Site:
         old_hashes = list(get_redis_smembers(self.resid, redis_skey_hashes))
         if len(old_hashes) == 0:
             logger.info('{}: first update'.format(self.name))
+        ignores = get_redis_smembers(self.resid, redis_skey_ignores)
+        ignores_all = get_redis_ignores()
+        if ignores_all is not None:
+            if ignores is None:
+                ignores = ignores_all
+            else:
+                ignores.update(ignores_all)
 
         links = {}
-        links = self.make_link_set(self.resid, link, depth, links)
+        links = self.make_link_set(self.resid, link, depth, links, ignores)
         if links is None:
             logger.warning('{}: no links found'.format(self.name))
         else:
@@ -594,6 +628,21 @@ class SiteList:
             name = get_redis_value(resid, redis_hkey_name)
             Site(name).sequences()
 
+    def config(self, linkv, depthv, ignoresv, recognizev):
+        if linkv is not None or depthv is not None:
+            logger.error('cannot apply to all sites')
+            return
+
+        if ignoresv is not None:
+            for i in ignoresv:
+                add_redis_ignores(i)
+        if recognizev is not None:
+            for r in recognizev:
+                remove_redis_ignores(r)
+
+        for i in get_redis_ignores():
+            print('ignores {}'.format(i))
+
     def export_data(self):
         data = dump_redis_data()
         if data is None:
@@ -637,9 +686,11 @@ if __name__ == '__main__':
     sp_rename.add_argument('name', nargs=1, metavar='NAME', help='site name')
     sp_rename.add_argument('new_name', nargs=1, metavar='NEW_NAME', help='new name')
     sp_config = sps.add_parser('config', help='configure a site')
-    sp_config.add_argument('name', nargs=1, metavar='NAME', help='site name')
-    sp_config.add_argument('--link', '-l', nargs=1, default=None, metavar='URL', help='link')
-    sp_config.add_argument('--depth', '-d', nargs=1, default=None, metavar='N', help='depth')
+    sp_config.add_argument('name', nargs='*', metavar='NAME', help='site name')
+    sp_config.add_argument('--link', '-l', nargs=1, metavar='URL', help='link')
+    sp_config.add_argument('--depth', '-d', nargs=1, metavar='N', help='depth')
+    sp_config.add_argument('--ignores', '-i', action='append', metavar='URL', help='add to ignore list')
+    sp_config.add_argument('--remove-ignores', '-r', action='append', metavar='URL', help='remove from ignore list')
     sp_update = sps.add_parser('update', help='update a site or all sites')
     sp_update.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
     sp_links = sps.add_parser('links', help='print all links of a site or all sites')
@@ -682,14 +733,11 @@ if __name__ == '__main__':
         name = args.name[0].strip()
         Site(name).rename(args.new_name[0])
     elif args.subparser_name == 'config':
-        name = args.name[0].strip()
-        link = None
-        if args.link is not None:
-            link = args.link[0]
-        depth = None
-        if args.depth is not None:
-            depth = args.depth[0]
-        Site(name).config(link, depth)
+        if len(args.name) == 0:
+            SiteList().config(args.link, args.depth, args.ignores, args.remove_ignores)
+        else:
+            name = args.name[0].strip()
+            Site(name).config(args.link, args.depth, args.ignores, args.remove_ignores)
     elif args.subparser_name == 'update':
         name = args.name[0].strip()
         if name.lower() == 'all':
