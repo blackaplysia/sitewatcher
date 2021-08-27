@@ -15,6 +15,8 @@ from datetime import datetime
 from redis import Redis
 from urllib.parse import urljoin
 
+from ifprint import PrintInterface
+
 debug_mode = False
 
 logger = logging.getLogger()
@@ -25,6 +27,8 @@ redis_port = os.environ.get('REDIS_PORT', '6379')
 redis_ttl = os.environ.get('REDIS_TTL', '60')
 redis = Redis(host=redis_host, port=redis_port, decode_responses=True)
 
+json_section_data = 'data'
+json_section_config = 'config'
 json_section_header = 'header'
 json_section_updated = 'updated'
 json_section_links = 'links'
@@ -135,7 +139,12 @@ def dump_redis_data():
     if index is None:
         return None
 
-    data = {}
+    global_config = {}
+    ignores = redis.smembers(redis_skey_ignores)
+    if ignores is not None:
+        global_config.update({ redis_skey_ignores: list(ignores) })
+
+    global_data = {}
     for n in index:
         resid = redis.get(n)
         name = redis.hget(resid, redis_hkey_name)
@@ -146,6 +155,11 @@ def dump_redis_data():
         updated_date_list = redis.lrange(resid + '+' + redis_lkey_updated, 0, -1)
         for dt in updated_date_list:
             updated.append({ dt: list(redis.smembers(resid + '+' + dt))})
+
+        config = {}
+        ignores = redis.smembers(resid + '+' + redis_skey_ignores)
+        if ignores is not None:
+            config.update({ redis_skey_ignores: list(ignores) })
 
         links = {}
         hashes = redis.smembers(resid + '+' + redis_skey_hashes)
@@ -165,7 +179,7 @@ def dump_redis_data():
                 }
             })
 
-        data.update({
+        global_data.update({
             n: {
                 json_section_header: {
                     redis_strkey_resid: resid,
@@ -173,6 +187,7 @@ def dump_redis_data():
                     redis_hkey_link: link,
                     redis_hkey_depth: depth,
                 },
+                json_section_config: config,
                 json_section_updated: updated,
                 json_section_links: links
             }
@@ -180,12 +195,23 @@ def dump_redis_data():
 
         logger.info('{}: {} links and {} sequences dumped'.format(name, len(hashes), len(updated_date_list)))
 
-    return data
+    json = {
+        json_section_config: global_config,
+        json_section_data: global_data
+    }
 
-def load_redis_data(data):
+    return json
 
-    for site in data:
-        header = data[site][json_section_header]
+def load_redis_data(json):
+    global_config = json[json_section_config]
+    global_data = json[json_section_data]
+
+    ignores = global_config[redis_skey_ignores]
+    for i in ignores:
+        redis.sadd(redis_skey_ignores, i)
+
+    for site in global_data:
+        header = global_data[site][json_section_header]
         resid = header[redis_strkey_resid]
 
         redis.set(site, resid)
@@ -199,7 +225,12 @@ def load_redis_data(data):
         print('hset {}, {}, {}'.format(resid, redis_hkey_link, header[redis_hkey_link]))
         print('hset {}, {}, {}'.format(resid, redis_hkey_depth, header[redis_hkey_depth]))
 
-        updated = data[site][json_section_updated]
+        config = global_data[site][json_section_config]
+        ignores = config[redis_skey_ignores]
+        for i in ignores:
+            redis.sadd(resid + '+' + redis_skey_ignores, i)
+
+        updated = global_data[site][json_section_updated]
         for sequence in updated:
             dt = list(sequence)[0]
             redis.rpush(resid + '+' + redis_lkey_updated, dt)
@@ -210,7 +241,7 @@ def load_redis_data(data):
                 print('sadd {}, {}'.format(resid + '+' + dt, uh))
                 #print('sadd {}, {}'.format(dt, uh))
 
-        links = data[site][json_section_links]
+        links = global_data[site][json_section_links]
         for h in links:
             redis.sadd(resid + '+' + redis_skey_hashes, h)
             redis.hset(h, redis_hkey_name, links[h][redis_hkey_name])
@@ -226,7 +257,7 @@ def load_redis_data(data):
             print('hset {}, {}, {}'.format(h, redis_hkey_site, links[h][redis_hkey_site]))
             print('hset {}, {}, {}'.format(h, redis_hkey_tag, links[h][redis_hkey_tag]))
 
-    return len(data)
+    return len(global_data)
 
 class Site:
 
@@ -278,6 +309,9 @@ class Site:
         delete_redis_set(self.resid, redis_skey_hashes)
         print('deleted {}'.format(self.resid + '+' + redis_skey_hashes))
         
+        delete_redis_set(self.resid, redis_skey_ignores)
+        print('deleted {}'.format(self.resid + '+' + redis_skey_ignores))
+
         delete_redis_name(self.name, self.resid)
         print('deleted {}'.format(self.name))
         print('deleted {}'.format(self.resid))
@@ -565,7 +599,7 @@ class Site:
                 updated_isotimestamp = datetime.utcfromtimestamp(float(updated)).isoformat()
                 print('{} {} {} {}'.format(seq, population, updated, updated_isotimestamp))
 
-    def print(self, sequence):
+    def print(self, sequence, interface, channel=None):
         if self.exists == False:
             logger.error('{}: no such a site'.format(self.name))
             return False
@@ -582,10 +616,12 @@ class Site:
                     print('hashes: {}'.format(hashes))
                 for h in hashes:
                     tag = get_redis_value(h, redis_hkey_tag)
+                    if tag is None:
+                        tag = 'obsolete'
                     if debug_mode is True:
-                        print('{} {} {}'.format(h, self.name, tag))
+                        interface.print(self.name, tag, channel, h)
                     else:
-                        print('{} {}'.format(self.name, tag))
+                        interface.print(self.name, tag, channel)
 
 class SiteList:
 
@@ -610,11 +646,11 @@ class SiteList:
             name = get_redis_value(resid, redis_hkey_name)
             Site(name).update(now)
 
-    def print_all(self, sequence):
+    def print_all(self, sequence, interface, channel=None):
         for s in self.site_name_list:
             resid = get_redis_resid(s)
             name = get_redis_value(resid, redis_hkey_name)
-            Site(name).print(sequence)
+            Site(name).print(sequence, interface, channel)
 
     def links_all(self):
         for s in self.site_name_list:
@@ -698,6 +734,8 @@ if __name__ == '__main__':
     sp_print = sps.add_parser('print', help='print latest links of a site or all sites')
     sp_print.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
     sp_print.add_argument('--sequence', '-s', default='0', metavar='N', help='time sequence number (latest=0)')
+    sp_print.add_argument('--slack', action='store_true', help='send to slack')
+    sp_print.add_argument('--channel', nargs=1, metavar='CHANNEL', help='slack channel')
     sp_sequences = sps.add_parser('sequences', help='list time sequences')
     sp_sequences.add_argument('name', nargs=1, metavar='NAME', help='site name')
     sp_list = sps.add_parser('list', help='list sites')
@@ -751,12 +789,21 @@ if __name__ == '__main__':
         else:
             Site(name).links()
     elif args.subparser_name == 'print':
-        name = args.name[0].strip()
-        seq = args.sequence
-        if name.lower() == 'all':
-            SiteList().print_all(seq)
+        if args.slack is True:
+            from ifslack import SlackInterface
+            interface = SlackInterface()
+            if args.channel is not None:
+                channel = '#' + args.channel[0]
+            else:
+                channel = '#general'
         else:
-            Site(name).print(seq)
+            interface = PrintInterface()
+            channel = None
+        name = args.name[0].strip()
+        if name.lower() == 'all':
+            SiteList().print_all(args.sequence, interface, channel)
+        else:
+            Site(name).print(args.sequence, interface, channel)
     elif args.subparser_name == 'sequences':
         name = args.name[0].strip()
         if name.lower() == 'all':
