@@ -18,9 +18,7 @@ from urllib.parse import urljoin
 from ifprint import PrintInterface
 
 debug_mode = False
-
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
+logger = None
 
 redis_host = os.environ.get('REDIS_HOST', 'localhost')
 redis_port = os.environ.get('REDIS_PORT', '6379')
@@ -193,7 +191,7 @@ def dump_redis_data():
             }
         })
 
-        logger.info('{}: {} links and {} sequences dumped'.format(name, len(hashes), len(updated_date_list)))
+        print('{}: {} links and {} sequences dumped'.format(name, len(hashes), len(updated_date_list)))
 
     json = {
         json_section_config: global_config,
@@ -273,15 +271,15 @@ class Site:
 
     def add(self, link, depth):
         if self.exists == True:
-            logger.error('already exists')
+            print('already exists', file=sys.stderr)
             return False
 
         if link is None:
-            logger.error('invalid url')
+            print('invalid url', file=sys.stderr)
             return False
 
         if depth < 1:
-            logger.error('invalid depth')
+            print('invalid depth', file=sys.stderr)
             return False
 
         add_redis_name(self.name, self.resid)
@@ -293,35 +291,26 @@ class Site:
 
     def delete(self):
         if self.exists == False:
-            logger.error('{}: no such a site'.format(self.name))
+            print('{}: no such a site'.format(self.name), file=sys.stderr)
             return False
 
         for updated in get_redis_list_values(self.resid, redis_lkey_updated):
             delete_redis_set(self.resid, updated)
-            print('deleted {}'.format(self.resid + '+' + updated))
         delete_redis_list(self.resid, redis_lkey_updated)
-        print('deleted {}'.format(self.resid + '+' + redis_lkey_updated))
 
         hashes = get_redis_smembers(self.resid, redis_skey_hashes)
         for h in hashes:
             delete_redis_values(h)
-            print('deleted {}'.format(h))
         delete_redis_set(self.resid, redis_skey_hashes)
-        print('deleted {}'.format(self.resid + '+' + redis_skey_hashes))
-        
         delete_redis_set(self.resid, redis_skey_ignores)
-        print('deleted {}'.format(self.resid + '+' + redis_skey_ignores))
 
         delete_redis_name(self.name, self.resid)
-        print('deleted {}'.format(self.name))
-        print('deleted {}'.format(self.resid))
-        print('index {}'.format(get_redis_names()))
         self.exists = False
         return True
 
     def rename(self, new_name):
         if self.exists == False:
-            logger.error('{}: no such a site'.format(self.name))
+            print('{}: no such a site'.format(self.name), file=sys.stderr)
             return False
 
         old_name = self.name
@@ -331,7 +320,7 @@ class Site:
 
     def config(self, linkv=None, depthv=None, ignoresv=None, recognizev=None):
         if self.exists == False:
-            logger.error('{}: no such a site'.format(self.name))
+            print('{}: no such a site'.format(self.name), file=sys.stderr)
             return False
 
         if linkv is not None:
@@ -365,13 +354,20 @@ class Site:
         try:
             res = requests.get(link)
         except requests.exceptions.InvalidSchema as e:
+            print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
+            logger.warning('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             logger.debug(e)
+            return title
         except requests.exceptions.RequestException as e:
-            logger.warning('{}: failed to fetch {}'.format(self.name, link))
+            print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
+            logger.warning('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             logger.debug(e)
+            return title
         except Exception as e:
-            logger.warning('{}: failed to fetch {}'.format(self.name, link))
+            print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
+            logger.warning('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             logger.debug(e)
+            return title
 
         if res is not None:
             if res.status_code >= 400:
@@ -382,7 +378,6 @@ class Site:
                     if parent_name is None:
                         parent_name = ''
                     title = '[' + ftype.extension + ']' + parent_name + '::' + title
-                    logger.debug('title: {} -> {}'.format(name, title))
                 else:
                     real_title = None
                     enc = res.encoding if res.encoding != 'ISO-8859-1' else None
@@ -404,7 +399,6 @@ class Site:
                                 title = real_title
                             else:
                                 title = title + '::' + real_title.strip()
-                    logger.debug('title: {} -> {}'.format(name, title))
 
         return title
 
@@ -435,7 +429,6 @@ class Site:
                         for i in ignores:
                             if ref_lower.startswith(i):
                                 is_ignored = True
-                                logger.debug('{} ignores {} which matches {}'.format(self.name, ref_lower, i))
                                 break
                     if is_ignored is False:
                         cs = t.strings
@@ -453,15 +446,18 @@ class Site:
         try:
             res = requests.get(link)
         except requests.exceptions.RequestException as e:
-            logger.warning('{}: failed to fetch {}'.format(self.name, link))
+            print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
+            logger.warning('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             logger.debug(e)
             return None
         except Exception as e:
-            logger.warning('{}: failed to fetch {}'.format(self.name, link))
+            print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
+            logger.warning('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             logger.debug(e)
             return None
 
         if res.status_code >= 400:
+            print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             logger.warning('{}: failed to fetch {}. Status code={}'.format(self.name, link, res.status_code))
             return None
 
@@ -479,7 +475,7 @@ class Site:
 
     def update(self, now=None):
         if self.exists == False:
-            logger.error('{}: no such a site'.format(self.name))
+            print('{}: no such a site'.format(self.name), file=sys.stderr)
             return False
 
         if now is None:
@@ -533,13 +529,13 @@ class Site:
                     if links[h]['parent'] is not None:
                         set_redis_value(h, redis_hkey_parent, links[h]['parent'])
                     set_redis_value(h, redis_hkey_tag, links[h]['tag'])
-                    logger.debug('{}: added: {} {}'.format(self.name, h, links[h]['tag']))
+                    logger.info('{}: added: {} {}'.format(self.name, h, links[h]['tag']))
 
                 if len(old_hashes) > 0:
                     for h in latests:
                         add_redis_smember(self.resid, str(now), h)
 
-                print('{}: updated'.format(self.name))
+                print('{}: updated'.format(self.name), file=sys.stderr)
 
             for h in obsoletes:
                 remove_redis_smember(self.resid, redis_skey_hashes, h)
@@ -549,16 +545,16 @@ class Site:
                 delete_redis_value(h, redis_hkey_link)
                 delete_redis_value(h, redis_hkey_parent)
                 delete_redis_value(h, redis_hkey_tag)
-                logger.debug('{}: removed: {} {}'.format(self.name, h, obsolete_tag))
+                logger.info('{}: removed: {} {}'.format(self.name, h, obsolete_tag))
 
         add_redis_list_value(self.resid, redis_lkey_updated, str(now), redis_lmax_updated, True)
-        logger.debug('{}: updated: {}'.format(self.name, now))
+        logger.info('{}: updated: {}'.format(self.name, now))
 
         return True
 
     def links(self, sequence):
         if self.exists == False:
-            logger.error('{}: no such a site'.format(self.name))
+            print('{}: no such a site'.format(self.name), file=sys.stderr)
             return False
 
         if sequence is None:
@@ -569,7 +565,7 @@ class Site:
                 hashes = list(get_redis_smembers(self.resid, updated))
                 if hashes is not None:
                     if debug_mode is True:
-                        print('hashes: {}'.format(hashes))
+                        print('{} hashes {}'.format(self.name, hashes))
                     for h in hashes:
                         n = get_redis_value(h,redis_hkey_name)
                         l = get_redis_value(h, redis_hkey_link)
@@ -593,7 +589,7 @@ class Site:
 
     def sequences(self):
         if self.exists == False:
-            logger.error('{}: no such a site'.format(self.name))
+            print('{}: no such a site'.format(self.name), file=sys.stderr)
             return False
 
         for seq in range(0, redis_lmax_updated):
@@ -609,7 +605,7 @@ class Site:
 
     def print(self, sequence, interface, channel=None):
         if self.exists == False:
-            logger.error('{}: no such a site'.format(self.name))
+            print('{}: no such a site'.format(self.name), file=sys.stderr)
             return False
 
         updated = get_redis_list_value(self.resid, redis_lkey_updated, sequence)
@@ -618,7 +614,7 @@ class Site:
             hashes = list(get_redis_smembers(self.resid, updated))
             if debug_mode is True:
                 updated_isotimestamp = datetime.utcfromtimestamp(float(updated)).isoformat()
-                print('updated: {} {}'.format(updated, updated_isotimestamp))
+                print('{} updated {} {}'.format(self.name, updated, updated_isotimestamp))
             if hashes is not None:
                 if debug_mode is True:
                     print('hashes: {}'.format(hashes))
@@ -634,7 +630,7 @@ class Site:
     @classmethod
     def global_config(cls, linkv, depthv, ignoresv, recognizev):
         if linkv is not None or depthv is not None:
-            logger.error('cannot apply to all sites')
+            print('cannot apply to all sites', file=sys.stderr)
             return
 
         if ignoresv is not None:
@@ -651,21 +647,21 @@ class Site:
     def export_data(cls):
         data = dump_redis_data()
         if data is None:
-            logger.info('no data')
+            print('no data to export', file=sys.stderr)
         else:
             print(json.dumps(data, ensure_ascii=False, indent=1))
 
     @classmethod
     def import_data(cls):
         if is_redis_empty() == False:
-            logger.error('database is not empty')
+            print('database is not empty', file=sys.stderr)
         else:
             data = json.loads(sys.stdin.read())
             if data is None:
-                logger.error('no data')
+                print('no data to import', file=sys.stderr)
             else:
                 count = load_redis_data(data)
-                logger.info('{} sites imported'.format(count))
+                print('{} sites imported'.format(count))
 
 class SiteList:
 
@@ -726,6 +722,20 @@ class SiteList:
             name = get_redis_value(resid, redis_hkey_name)
             Site(name).sequences()
 
+def setup_logger(is_debug_mode):
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    file_handler = logging.FileHandler('./' + os.path.basename(__file__) + '.log')
+    if is_debug_mode:
+        file_handler.setLevel(logging.DEBUG)
+    else:
+        file_handler.setLevel(logging.WARNING)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s'))
+    logger.addHandler(file_handler)
+
+    return logger
+
 if __name__ == '__main__':
 
     import argparse
@@ -780,15 +790,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     debug_mode = args.debug
 
-    log_format = '%(levelname)s: %(message)s'
-    log_level = logging.INFO
-    if debug_mode is True:
-        log_format = '%(asctime)s %(name)-12s %(levelname)-8s %(message)s'
-        log_level = logging.DEBUG
-    console = logging.StreamHandler()
-    console.setFormatter(logging.Formatter(log_format))
-    console.setLevel(log_level)
-    logger.addHandler(console)
+    logger = setup_logger(debug_mode)
 
     if args.subparser_name == 'add':
         Site(args.name[0]).add(args.link[0], int(args.depth))
