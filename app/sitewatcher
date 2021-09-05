@@ -556,30 +556,38 @@ class Site:
 
         return True
 
-    def links(self):
+    def links(self, sequence):
         if self.exists == False:
             logger.error('{}: no such a site'.format(self.name))
             return False
 
-        hashes = list(get_redis_smembers(self.resid, redis_skey_hashes))
-        for h in hashes:
-            n = get_redis_value(h,redis_hkey_name)
-            l = get_redis_value(h, redis_hkey_link)
-            t = get_redis_value(h, redis_hkey_tag)
-            ph = get_redis_value(h, redis_hkey_parent)
-            if ph is None:
-                pl = None
-            else:
-                pl = get_redis_value(ph, redis_hkey_link)
-            sh = get_redis_value(h, redis_hkey_site)
-            if sh is None:
-                sl = None
-            else:
-                sl = get_redis_value(sh, redis_hkey_link)
-            if debug_mode:
-                print('{} {} {} {} {} {} {} {}'.format(self.name, sh, ph, h, sl, pl, l, n))
-            else:
-                print('{} {} {} {} {}'.format(self.name, sl, pl, l, n))
+        if sequence is None:
+            hashes = list(get_redis_smembers(self.resid, redis_skey_hashes))
+        else:
+            updated = get_redis_list_value(self.resid, redis_lkey_updated, sequence)
+            if updated is not None:
+                hashes = list(get_redis_smembers(self.resid, updated))
+                if hashes is not None:
+                    if debug_mode is True:
+                        print('hashes: {}'.format(hashes))
+                    for h in hashes:
+                        n = get_redis_value(h,redis_hkey_name)
+                        l = get_redis_value(h, redis_hkey_link)
+                        t = get_redis_value(h, redis_hkey_tag)
+                        ph = get_redis_value(h, redis_hkey_parent)
+                        if ph is None:
+                            pl = None
+                        else:
+                            pl = get_redis_value(ph, redis_hkey_link)
+                        sh = get_redis_value(h, redis_hkey_site)
+                        if sh is None:
+                            sl = None
+                        else:
+                            sl = get_redis_value(sh, redis_hkey_link)
+                        if debug_mode:
+                            print('{} {} {} {} {} {} {} {}'.format(self.name, sh, ph, h, sl, pl, l, n))
+                        else:
+                            print('{} {} {} {} {}'.format(self.name, sl, pl, l, n))
 
         return True
 
@@ -652,11 +660,11 @@ class SiteList:
             name = get_redis_value(resid, redis_hkey_name)
             Site(name).print(sequence, interface, channel)
 
-    def links_all(self):
+    def links_all(self, sequence):
         for s in self.site_name_list:
             resid = get_redis_resid(s)
             name = get_redis_value(resid, redis_hkey_name)
-            Site(name).links()
+            Site(name).links(sequence)
 
     def sequences_all(self):
         for s in self.site_name_list:
@@ -731,9 +739,10 @@ if __name__ == '__main__':
     sp_update.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
     sp_links = sps.add_parser('links', help='print all links of a site or all sites')
     sp_links.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
+    sp_links.add_argument('--sequence', '-s', default=None, metavar='N', help='time sequence number (0-9, latest=0, all by default)')
     sp_print = sps.add_parser('print', help='print latest links of a site or all sites')
     sp_print.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
-    sp_print.add_argument('--sequence', '-s', default='0', metavar='N', help='time sequence number (latest=0)')
+    sp_print.add_argument('--sequence', '-s', default='0', metavar='N', help='time sequence number (0-9, latest=0 by deafult)')
     sp_print.add_argument('--slack', action='store_true', help='send to slack')
     sp_print.add_argument('--channel', nargs=1, metavar='CHANNEL', help='slack channel')
     sp_sequences = sps.add_parser('sequences', help='list time sequences')
@@ -785,9 +794,9 @@ if __name__ == '__main__':
     elif args.subparser_name == 'links':
         name = args.name[0].strip()
         if name.lower() == 'all':
-            SiteList().links_all()
+            SiteList().links_all(args.sequence)
         else:
-            Site(name).links()
+            Site(name).links(args.sequence)
     elif args.subparser_name == 'print':
         if args.slack is True:
             from ifslack import SlackInterface
