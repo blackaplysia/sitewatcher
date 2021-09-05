@@ -605,7 +605,7 @@ class Site:
                 else:
                     population = len(hashes)
                 updated_isotimestamp = datetime.utcfromtimestamp(float(updated)).isoformat()
-                print('{} {} {} {}'.format(seq, population, updated, updated_isotimestamp))
+                print('{} {} {} {} {}'.format(self.name, seq, population, updated, updated_isotimestamp))
 
     def print(self, sequence, interface, channel=None):
         if self.exists == False:
@@ -631,48 +631,8 @@ class Site:
                     else:
                         interface.print(self.name, tag, channel)
 
-class SiteList:
-
-    def __init__(self):
-        self.site_name_list = sorted(list(get_redis_names()))
-
-    def list(self):
-        for s in self.site_name_list:
-            resid = get_redis_resid(s)
-            name = get_redis_value(resid, redis_hkey_name)
-            link = get_redis_value(resid, redis_hkey_link)
-            depth = get_redis_value(resid, redis_hkey_depth)
-            if debug_mode is True:
-                print('{} {} {} {}'.format(resid, name, link, depth))
-            else:
-                print('{} {} {}'.format(name, link, depth))
-
-    def update_all(self):
-        now = time.time()
-        for s in self.site_name_list:
-            resid = get_redis_resid(s)
-            name = get_redis_value(resid, redis_hkey_name)
-            Site(name).update(now)
-
-    def print_all(self, sequence, interface, channel=None):
-        for s in self.site_name_list:
-            resid = get_redis_resid(s)
-            name = get_redis_value(resid, redis_hkey_name)
-            Site(name).print(sequence, interface, channel)
-
-    def links_all(self, sequence):
-        for s in self.site_name_list:
-            resid = get_redis_resid(s)
-            name = get_redis_value(resid, redis_hkey_name)
-            Site(name).links(sequence)
-
-    def sequences_all(self):
-        for s in self.site_name_list:
-            resid = get_redis_resid(s)
-            name = get_redis_value(resid, redis_hkey_name)
-            Site(name).sequences()
-
-    def config(self, linkv, depthv, ignoresv, recognizev):
+    @classmethod
+    def global_config(cls, linkv, depthv, ignoresv, recognizev):
         if linkv is not None or depthv is not None:
             logger.error('cannot apply to all sites')
             return
@@ -685,16 +645,18 @@ class SiteList:
                 remove_redis_ignores(r)
 
         for i in get_redis_ignores():
-            print('ignores {}'.format(i))
+            print('global_config ignores {}'.format(i))
 
-    def export_data(self):
+    @classmethod
+    def export_data(cls):
         data = dump_redis_data()
         if data is None:
             logger.info('no data')
         else:
             print(json.dumps(data, ensure_ascii=False, indent=1))
 
-    def import_data(self):
+    @classmethod
+    def import_data(cls):
         if is_redis_empty() == False:
             logger.error('database is not empty')
         else:
@@ -704,6 +666,65 @@ class SiteList:
             else:
                 count = load_redis_data(data)
                 logger.info('{} sites imported'.format(count))
+
+class SiteList:
+
+    def __init__(self, name_template=None):
+        if name_template is None:
+            self.site_name_list = sorted(list(get_redis_names()))
+        else:
+            name_template_lower = name_template.lower()
+            if name_template_lower == 'all':
+                self.site_name_list = sorted(list(get_redis_names()))
+            else:
+                all_name_list = sorted(list(get_redis_names()))
+                name_list = []
+                for s in all_name_list:
+                    if name_template_lower in s:
+                        name_list.append(s)
+                self.site_name_list = name_list
+
+    def list(self):
+        for s in self.site_name_list:
+            resid = get_redis_resid(s)
+            name = get_redis_value(resid, redis_hkey_name)
+            link = get_redis_value(resid, redis_hkey_link)
+            depth = get_redis_value(resid, redis_hkey_depth)
+            if debug_mode is True:
+                print('{} {} {} {}'.format(resid, name, link, depth))
+            else:
+                print('{} {} {}'.format(name, link, depth))
+
+    def config(self, linkv=None, depthv=None, ignoresv=None, recognizev=None):
+        for s in self.site_name_list:
+            resid = get_redis_resid(s)
+            name = get_redis_value(resid, redis_hkey_name)
+            Site(name).config(linkv, depthv, ignoresv, recognizev)
+
+    def update(self):
+        now = time.time()
+        for s in self.site_name_list:
+            resid = get_redis_resid(s)
+            name = get_redis_value(resid, redis_hkey_name)
+            Site(name).update(now)
+
+    def print(self, sequence, interface, channel=None):
+        for s in self.site_name_list:
+            resid = get_redis_resid(s)
+            name = get_redis_value(resid, redis_hkey_name)
+            Site(name).print(sequence, interface, channel)
+
+    def links(self, sequence):
+        for s in self.site_name_list:
+            resid = get_redis_resid(s)
+            name = get_redis_value(resid, redis_hkey_name)
+            Site(name).links(sequence)
+
+    def sequences(self):
+        for s in self.site_name_list:
+            resid = get_redis_resid(s)
+            name = get_redis_value(resid, redis_hkey_name)
+            Site(name).sequences()
 
 if __name__ == '__main__':
 
@@ -730,7 +751,7 @@ if __name__ == '__main__':
     sp_rename.add_argument('name', nargs=1, metavar='NAME', help='site name')
     sp_rename.add_argument('new_name', nargs=1, metavar='NEW_NAME', help='new name')
     sp_config = sps.add_parser('config', help='configure a site')
-    sp_config.add_argument('name', nargs='*', metavar='NAME', help='site name')
+    sp_config.add_argument('name', nargs='?', metavar='NAME', help='site name')
     sp_config.add_argument('--link', '-l', nargs=1, metavar='URL', help='link')
     sp_config.add_argument('--depth', '-d', nargs=1, metavar='N', help='depth')
     sp_config.add_argument('--ignores', '-i', action='append', metavar='URL', help='add to ignore list')
@@ -748,6 +769,7 @@ if __name__ == '__main__':
     sp_sequences = sps.add_parser('sequences', help='list time sequences')
     sp_sequences.add_argument('name', nargs=1, metavar='NAME', help='site name')
     sp_list = sps.add_parser('list', help='list sites')
+    sp_list.add_argument('name', nargs='?', metavar='NAME', help='site name')
     sp_export = sps.add_parser('export', help='export database')
     sp_import = sps.add_parser('import', help='import database')
 
@@ -769,34 +791,20 @@ if __name__ == '__main__':
     logger.addHandler(console)
 
     if args.subparser_name == 'add':
-        name = args.name[0].strip()
-        link = args.link[0].strip()
-        depth = int(args.depth)
-        Site(name).add(link, depth)
+        Site(args.name[0]).add(args.link[0], int(args.depth))
     elif args.subparser_name == 'delete':
-        name = args.name[0].strip()
-        Site(name).delete()
+        Site(args.name[0]).delete()
     elif args.subparser_name == 'rename':
-        name = args.name[0].strip()
-        Site(name).rename(args.new_name[0])
+        Site(args.name[0]).rename(args.new_name[0])
     elif args.subparser_name == 'config':
-        if len(args.name) == 0:
-            SiteList().config(args.link, args.depth, args.ignores, args.remove_ignores)
+        if args.name is None:
+            Site.global_config(args.link, args.depth, args.ignores, args.remove_ignores)
         else:
-            name = args.name[0].strip()
-            Site(name).config(args.link, args.depth, args.ignores, args.remove_ignores)
+            SiteList(args.name).config(args.link, args.depth, args.ignores, args.remove_ignores)
     elif args.subparser_name == 'update':
-        name = args.name[0].strip()
-        if name.lower() == 'all':
-            SiteList().update_all()
-        else:
-            Site(name).update()
+        SiteList(args.name[0]).update()
     elif args.subparser_name == 'links':
-        name = args.name[0].strip()
-        if name.lower() == 'all':
-            SiteList().links_all(args.sequence)
-        else:
-            Site(name).links(args.sequence)
+        SiteList(args.name[0]).links(args.sequence)
     elif args.subparser_name == 'print':
         if args.slack is True:
             from ifslack import SlackInterface
@@ -808,20 +816,12 @@ if __name__ == '__main__':
         else:
             interface = PrintInterface()
             channel = None
-        name = args.name[0].strip()
-        if name.lower() == 'all':
-            SiteList().print_all(args.sequence, interface, channel)
-        else:
-            Site(name).print(args.sequence, interface, channel)
+        SiteList(args.name[0]).print(args.sequence, interface, channel)
     elif args.subparser_name == 'sequences':
-        name = args.name[0].strip()
-        if name.lower() == 'all':
-            SiteList().sequences_all()
-        else:
-            Site(name).sequences()
+        SiteList(args.name[0]).sequences()
     elif args.subparser_name == 'list':
-        SiteList().list()
+        SiteList(args.name).list()
     elif args.subparser_name == 'export':
-        SiteList().export_data()
+        Site.export_data()
     elif args.subparser_name == 'import':
-        SiteList().import_data()
+        Site.import_data()
