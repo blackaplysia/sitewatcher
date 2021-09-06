@@ -563,27 +563,28 @@ class Site:
             updated = get_redis_list_value(self.resid, redis_lkey_updated, sequence)
             if updated is not None:
                 hashes = list(get_redis_smembers(self.resid, updated))
-                if hashes is not None:
-                    if debug_mode is True:
-                        print('{} hashes {}'.format(self.name, hashes))
-                    for h in hashes:
-                        n = get_redis_value(h,redis_hkey_name)
-                        l = get_redis_value(h, redis_hkey_link)
-                        t = get_redis_value(h, redis_hkey_tag)
-                        ph = get_redis_value(h, redis_hkey_parent)
-                        if ph is None:
-                            pl = None
-                        else:
-                            pl = get_redis_value(ph, redis_hkey_link)
-                        sh = get_redis_value(h, redis_hkey_site)
-                        if sh is None:
-                            sl = None
-                        else:
-                            sl = get_redis_value(sh, redis_hkey_link)
-                        if debug_mode:
-                            print('{} {} {} {} {} {} {} {}'.format(self.name, sh, ph, h, sl, pl, l, n))
-                        else:
-                            print('{} {} {} {} {}'.format(self.name, sl, pl, l, n))
+
+        if hashes is not None:
+            if debug_mode is True:
+                print('{} hashes {}'.format(self.name, hashes))
+            for h in hashes:
+                n = get_redis_value(h,redis_hkey_name)
+                l = get_redis_value(h, redis_hkey_link)
+                t = get_redis_value(h, redis_hkey_tag)
+                ph = get_redis_value(h, redis_hkey_parent)
+                if ph is None:
+                    pl = None
+                else:
+                    pl = get_redis_value(ph, redis_hkey_link)
+                sh = get_redis_value(h, redis_hkey_site)
+                if sh is None:
+                    sl = None
+                else:
+                    sl = get_redis_value(sh, redis_hkey_link)
+                if debug_mode:
+                    print('{} {} {} {} {} {} {} {}'.format(self.name, sh, ph, h, sl, pl, l, n))
+                else:
+                    print('{} {} {} {} {}'.format(self.name, sl, pl, l, n))
 
         return True
 
