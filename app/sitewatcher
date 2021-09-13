@@ -355,17 +355,17 @@ class Site:
             res = requests.get(link)
         except requests.exceptions.InvalidSchema as e:
             print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
-            logger.warning('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
+            logger.warning('{}: failed to fetch {}'.format(self.name, link))
             logger.debug(e)
             return title
         except requests.exceptions.RequestException as e:
             print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
-            logger.warning('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
+            logger.warning('{}: failed to fetch {}'.format(self.name, link))
             logger.debug(e)
             return title
         except Exception as e:
             print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
-            logger.warning('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
+            logger.warning('{}: failed to fetch {}'.format(self.name, link))
             logger.debug(e)
             return title
 
@@ -447,12 +447,12 @@ class Site:
             res = requests.get(link)
         except requests.exceptions.RequestException as e:
             print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
-            logger.warning('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
+            logger.warning('{}: failed to fetch {}'.format(self.name, link))
             logger.debug(e)
             return None
         except Exception as e:
             print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
-            logger.warning('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
+            logger.warning('{}: failed to fetch {}'.format(self.name, link))
             logger.debug(e)
             return None
 
