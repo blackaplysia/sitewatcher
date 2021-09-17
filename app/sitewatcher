@@ -191,7 +191,7 @@ def dump_redis_data():
             }
         })
 
-        print('{}: {} links and {} sequences dumped'.format(name, len(hashes), len(updated_date_list)))
+        print('{}: {} links and {} sequences dumped'.format(name, len(hashes), len(updated_date_list)), file=sys.stderr)
 
     json = {
         json_section_config: global_config,
@@ -217,11 +217,11 @@ def load_redis_data(json):
         redis.sadd(redis_skey_index, site)
         redis.hset(resid, redis_hkey_link, header[redis_hkey_link])
         redis.hset(resid, redis_hkey_depth, header[redis_hkey_depth])
-        print('set {}, {}'.format(site, resid))
-        print('hset {}, {}, {}'.format(resid, redis_hkey_name, site))
-        print('sadd {}, {}'.format(redis_skey_index, site))
-        print('hset {}, {}, {}'.format(resid, redis_hkey_link, header[redis_hkey_link]))
-        print('hset {}, {}, {}'.format(resid, redis_hkey_depth, header[redis_hkey_depth]))
+        print('set {}, {}'.format(site, resid), file=sys.stderr)
+        print('hset {}, {}, {}'.format(resid, redis_hkey_name, site), file=sys.stderr)
+        print('sadd {}, {}'.format(redis_skey_index, site), file=sys.stderr)
+        print('hset {}, {}, {}'.format(resid, redis_hkey_link, header[redis_hkey_link]), file=sys.stderr)
+        print('hset {}, {}, {}'.format(resid, redis_hkey_depth, header[redis_hkey_depth]), file=sys.stderr)
 
         config = global_data[site][json_section_config]
         ignores = config[redis_skey_ignores]
@@ -232,11 +232,11 @@ def load_redis_data(json):
         for sequence in updated:
             dt = list(sequence)[0]
             redis.rpush(resid + '+' + redis_lkey_updated, dt)
-            print('rpush {}, {}'.format(resid + '+' + redis_lkey_updated, dt))
+            print('rpush {}, {}'.format(resid + '+' + redis_lkey_updated, dt), file=sys.stderr)
             for uh in sequence[dt]:
                 redis.sadd(resid + '+' + dt, uh)
                 #redis.sadd(dt, uh)
-                print('sadd {}, {}'.format(resid + '+' + dt, uh))
+                print('sadd {}, {}'.format(resid + '+' + dt, uh), file=sys.stderr)
                 #print('sadd {}, {}'.format(dt, uh))
 
         links = global_data[site][json_section_links]
@@ -248,12 +248,12 @@ def load_redis_data(json):
                 redis.hset(h, redis_hkey_parent, links[h][redis_hkey_parent])
             redis.hset(h, redis_hkey_site, links[h][redis_hkey_site])
             redis.hset(h, redis_hkey_tag, links[h][redis_hkey_tag])
-            print('hadd {}, {}'.format(resid + '+' + redis_skey_hashes, h))
-            print('hset {}, {}, {}'.format(h, redis_hkey_name, links[h][redis_hkey_name]))
-            print('hset {}, {}, {}'.format(h, redis_hkey_link, links[h][redis_hkey_link]))
-            print('hset {}, {}, {}'.format(h, redis_hkey_parent, links[h][redis_hkey_parent]))
-            print('hset {}, {}, {}'.format(h, redis_hkey_site, links[h][redis_hkey_site]))
-            print('hset {}, {}, {}'.format(h, redis_hkey_tag, links[h][redis_hkey_tag]))
+            print('hadd {}, {}'.format(resid + '+' + redis_skey_hashes, h), file=sys.stderr)
+            print('hset {}, {}, {}'.format(h, redis_hkey_name, links[h][redis_hkey_name]), file=sys.stderr)
+            print('hset {}, {}, {}'.format(h, redis_hkey_link, links[h][redis_hkey_link]), file=sys.stderr)
+            print('hset {}, {}, {}'.format(h, redis_hkey_parent, links[h][redis_hkey_parent]), file=sys.stderr)
+            print('hset {}, {}, {}'.format(h, redis_hkey_site, links[h][redis_hkey_site]), file=sys.stderr)
+            print('hset {}, {}, {}'.format(h, redis_hkey_tag, links[h][redis_hkey_tag]), file=sys.stderr)
 
     return len(global_data)
 
@@ -615,10 +615,10 @@ class Site:
             hashes = list(get_redis_smembers(self.resid, updated))
             if debug_mode is True:
                 updated_isotimestamp = datetime.utcfromtimestamp(float(updated)).isoformat()
-                print('{} updated {} {}'.format(self.name, updated, updated_isotimestamp))
+                print('{} updated {} {}'.format(self.name, updated, updated_isotimestamp), file=sys.stderr)
             if hashes is not None:
                 if debug_mode is True:
-                    print('hashes: {}'.format(hashes))
+                    print('hashes: {}'.format(hashes), file=sys.stderr)
                 for h in hashes:
                     tag = get_redis_value(h, redis_hkey_tag)
                     if tag is None:
@@ -662,7 +662,7 @@ class Site:
                 print('no data to import', file=sys.stderr)
             else:
                 count = load_redis_data(data)
-                print('{} sites imported'.format(count))
+                print('{} sites imported'.format(count), file=sys.stderr)
 
 class SiteList:
 
