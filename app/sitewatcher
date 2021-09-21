@@ -15,9 +15,10 @@ from datetime import datetime
 from redis import Redis
 from urllib.parse import urljoin
 
-from ifprint import PrintInterface
-from ifcsv import IfCsv
-from ifhtml import IfHtml
+from interfaces.IfHtml import IfHtml
+from interfaces.IfCsv import IfCsv
+from interfaces.IfStdout import IfStdout
+from interfaces.IfSlack import IfSlack
 
 debug_mode = False
 logger = None
@@ -758,14 +759,13 @@ if __name__ == '__main__':
         SiteList(args.name[0]).links(args.sequence)
     elif args.subparser_name == 'print':
         if args.slack is True:
-            from ifslack import SlackInterface
-            interface = SlackInterface()
+            interface = IfSlack()
             if args.channel is not None:
                 channel = '#' + args.channel[0]
             else:
                 channel = '#general'
         else:
-            interface = PrintInterface()
+            interface = IfStdout()
             channel = None
         SiteList(args.name[0]).print(args.sequence, interface, channel)
     elif args.subparser_name == 'sequences':
