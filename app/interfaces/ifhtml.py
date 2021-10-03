@@ -6,9 +6,9 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-from interfaces.IfSource import IfSource
+from interfaces.ifsource import BaseSource
 
-class IfHtml(IfSource):
+class Source(BaseSource):
 
     def get_references(self, bs, parent_hash, parent_link, links, ignores):
         children = {}

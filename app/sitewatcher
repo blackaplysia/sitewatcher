@@ -12,13 +12,9 @@ import sys
 import time
 from bs4 import BeautifulSoup
 from datetime import datetime
+from importlib import import_module
 from redis import Redis
 from urllib.parse import urljoin
-
-from interfaces.IfHtml import IfHtml
-from interfaces.IfCsv import IfCsv
-from interfaces.IfStdout import IfStdout
-from interfaces.IfSlack import IfSlack
 
 debug_mode = False
 logger = None
@@ -410,13 +406,6 @@ class Site:
 
         return title
 
-    def get_source_interface(self, filetype):
-        if filetype == 'csv':
-            source = IfCsv(self.name, self.resid, logger)
-        else:
-            source = IfHtml(self.name, self.resid, logger)
-        return source
-
     def update(self, now=None):
         if self.exists == False:
             print('{}: no such a site'.format(self.name), file=sys.stderr)
@@ -439,7 +428,9 @@ class Site:
             else:
                 ignores.update(ignores_all)
 
-        source = self.get_source_interface(filetype)
+        interface = filetype if filetype is not None else 'html' 
+        module = import_module('.if' + interface, 'interfaces')
+        source = module.Source(self.name, self.resid, logger)
         links = source.make_link_set(self.resid, link, depth, ignores)
 
         if links is None or len(links) == 0:
@@ -550,12 +541,29 @@ class Site:
                 updated_isotimestamp = datetime.utcfromtimestamp(float(updated)).isoformat()
                 print('{} {} {} {} {}'.format(self.name, seq, population, updated, updated_isotimestamp))
 
-    def print(self, sequence, interface, channel=None):
+    def print(self, sequence, device=None):
         if self.exists == False:
             print('{}: no such a site'.format(self.name), file=sys.stderr)
             return False
 
         updated = get_redis_list_value(self.resid, redis_lkey_updated, sequence)
+
+        module = None
+        printer = None
+        interface = 'stdout'
+        args = None
+        if device is not None:
+            device_parsed = device.split(':', 1)
+            if len(device_parsed) >= 1:
+                interface = device_parsed[0]
+                if len(device_parsed) > 1:
+                    args = device_parsed[1]
+        try:
+            module = import_module('.if' + interface, 'interfaces')
+        except ModuleNotFoundError as e:
+            print('{}: {} is not a printer device'.format(self.name, interface), file=sys.stderr)
+            return False
+        printer = module.Printer(args)
 
         if updated is not None:
             hashes = list(get_redis_smembers(self.resid, updated))
@@ -570,9 +578,9 @@ class Site:
                     if tag is None:
                         tag = 'obsolete'
                     if debug_mode is True:
-                        interface.print(self.name, tag, channel, h)
+                        printer.print(self.name, tag, h)
                     else:
-                        interface.print(self.name, tag, channel)
+                        printer.print(self.name, tag)
 
     @classmethod
     def global_config(cls, linkv, filetypev, depthv, ignoresv, recognizev):
@@ -652,11 +660,11 @@ class SiteList:
             name = get_redis_value(resid, redis_hkey_name)
             Site(name).update(now)
 
-    def print(self, sequence, interface, channel=None):
+    def print(self, sequence, device):
         for s in self.site_name_list:
             resid = get_redis_resid(s)
             name = get_redis_value(resid, redis_hkey_name)
-            Site(name).print(sequence, interface, channel)
+            Site(name).print(sequence,device)
 
     def links(self, sequence):
         for s in self.site_name_list:
@@ -724,8 +732,7 @@ if __name__ == '__main__':
     sp_print = sps.add_parser('print', help='print latest links of a site or all sites')
     sp_print.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
     sp_print.add_argument('--sequence', '-s', default='0', metavar='N', help='time sequence number (0-9, latest=0 by deafult)')
-    sp_print.add_argument('--slack', action='store_true', help='send to slack')
-    sp_print.add_argument('--channel', nargs=1, metavar='CHANNEL', help='slack channel')
+    sp_print.add_argument('--device', '-d', nargs=1, metavar='DEVICE', help='device information like DEVICE:ARGUMENT')
     sp_sequences = sps.add_parser('sequences', help='list time sequences')
     sp_sequences.add_argument('name', nargs=1, metavar='NAME', help='site name')
     sp_list = sps.add_parser('list', help='list sites')
@@ -758,16 +765,8 @@ if __name__ == '__main__':
     elif args.subparser_name == 'links':
         SiteList(args.name[0]).links(args.sequence)
     elif args.subparser_name == 'print':
-        if args.slack is True:
-            interface = IfSlack()
-            if args.channel is not None:
-                channel = '#' + args.channel[0]
-            else:
-                channel = '#general'
-        else:
-            interface = IfStdout()
-            channel = None
-        SiteList(args.name[0]).print(args.sequence, interface, channel)
+        device = None if args.device is None else args.device[0]
+        SiteList(args.name[0]).print(args.sequence, device)
     elif args.subparser_name == 'sequences':
         SiteList(args.name[0]).sequences()
     elif args.subparser_name == 'list':

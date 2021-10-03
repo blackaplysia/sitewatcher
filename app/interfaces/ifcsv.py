@@ -5,9 +5,9 @@ import hashlib
 import requests
 from urllib.parse import urlparse
 
-from interfaces.IfSource import IfSource
+from interfaces.ifsource import BaseSource
 
-class IfCsv(IfSource):
+class Source(BaseSource):
 
     def get_file(self, link):
 
@@ -59,27 +59,4 @@ class IfCsv(IfSource):
             return None
         else:
             return self.get_links(text)
-
-if __name__ == '__main__':
-    import sys
-    import logging
-    logger = logging.getLogger()
-
-    if len(sys.argv) < 2:
-        print('command argument is expected')
-        exit(1)
-    fn = sys.argv[1]
-
-    lines = None
-    try:
-        fimp = open(fn)
-        lines = fimp.read() + '\n'
-        fimp.close()
-    except Exception as e:
-        print(e)
-        exit(1)
-
-    links = IfCsv('News', '0', logger).get_links(lines)
-    for l in links:
-        print(l)
 

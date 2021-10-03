@@ -1,13 +1,13 @@
 #!/usr/bin/python3
 
-from interfaces.IfPrinter import IfPrinter
+from interfaces.ifprinter import BasePrinter
 
-class IfStdout(IfPrinter):
+class Printer(BasePrinter):
 
-    def __init__(self):
+    def __init__(self, args=None):
         pass
 
-    def print(self, title, message, channel=None, hash=None):
+    def print(self, title, message, hash=None):
         if hash is None:
             print(' '.join([title, message]))
         else:

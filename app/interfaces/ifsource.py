@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-class IfSource:
+class BaseSource:
 
     def __init__(self, name, resid, logger):
         self.name = name

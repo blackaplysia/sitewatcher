@@ -7,15 +7,21 @@ import time
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackClientError, SlackApiError
 
-from interfaces.IfPrinter import IfPrinter
+from interfaces.ifprinter import BasePrinter
 
-class IfSlack(IfPrinter):
+class Printer(BasePrinter):
 
-    def __init__(self):
+    def __init__(self, args=None):
         token = os.environ.get('SLACK_BOT_TOKEN')
         self.client = WebClient(token=token)
+        self.args = args
 
-    def print(self, title, message, channel, hash=None):
+    def print(self, title, message, hash=None):
+        if self.args is not None:
+            channel = '#' + self.args
+        else:
+            channel = '#general'
+
         try:
             self.client.chat_postMessage(channel=channel, text=' '.join([message]))
         except SlackApiError as e:
