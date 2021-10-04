@@ -30,5 +30,7 @@ class Printer(BasePrinter):
                 print('Rate limited. Retrying in {} seconds'.format(delay), file=sys.stderr)
                 time.sleep(delay)
                 self.client.chat_postMessage(channel=channel, text=' '.join([message]))
+            elif e.response.status_code < 400:
+                print('Slack api error: Status={}, Reason={}'.format(e.response.status_code, e.response['error']), file=sys.stderr)
         except SlackClientError as e:
             print(e)
