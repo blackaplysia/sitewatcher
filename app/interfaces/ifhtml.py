@@ -3,6 +3,7 @@
 import hashlib
 import re
 import requests
+import sys
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
@@ -11,6 +12,7 @@ from interfaces.ifsource import BaseSource
 class Source(BaseSource):
 
     def get_references(self, bs, parent_hash, parent_link, links, ignores):
+        child_links = {}
         children = {}
         for t in bs.find_all('a'):
             ref = t.get('href')
@@ -44,8 +46,16 @@ class Source(BaseSource):
                             title = re.sub('[　 ]+', ' ', '::'.join(filter(lambda x: len(x) > 0, [s.strip() for s in cs])))
                         tag = title + (' ' if len(title) > 0 else '') + '---- ' + ref
                         hash = hashlib.md5((self.resid + tag).encode()).hexdigest()
-                        if hash not in links:
+                        if ref in child_links:
+                            hash_existing = child_links[ref]
+                            title_existing = children[hash_existing]['name']
+                            if len(title_existing) == 0 or len(title_existing) < len(title):
+                                children.pop(hash_existing)
+                                children.update({hash: { 'site': self.resid, 'parent': parent_hash, 'name': title, 'link': ref, 'tag': tag }})
+                                child_links[ref] = hash
+                        else:
                             children.update({hash: { 'site': self.resid, 'parent': parent_hash, 'name': title, 'link': ref, 'tag': tag }})
+                            child_links.update({ref: hash})
         return children
 
     def make_link_set_recursive(self, hash, link, depth, links, ignores):
