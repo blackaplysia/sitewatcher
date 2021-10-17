@@ -692,7 +692,7 @@ def setup_logger(is_debug_mode):
 
     return logger
 
-if __name__ == '__main__':
+def main():
 
     import argparse
     import csv
@@ -742,7 +742,7 @@ if __name__ == '__main__':
 
     if len(sys.argv) == 1:
         print(parser.format_usage(), file=sys.stderr)
-        exit(0)
+        return 1
 
     args = parser.parse_args()
     debug_mode = args.debug
@@ -775,3 +775,8 @@ if __name__ == '__main__':
         Site.export_data()
     elif args.subparser_name == 'import':
         Site.import_data()
+
+    return 0
+
+if __name__ == '__main__':
+    exit(main())
