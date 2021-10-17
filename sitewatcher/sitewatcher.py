@@ -16,8 +16,8 @@ from importlib import import_module
 from redis import Redis
 from urllib.parse import urljoin
 
-debug_mode = False
 logger = None
+debug_mode = False
 
 redis_host = os.environ.get('REDIS_HOST', 'localhost')
 redis_port = os.environ.get('REDIS_PORT', '6379')
@@ -341,7 +341,7 @@ class Site:
         filetype = get_redis_value(self.resid, redis_hkey_filetype)
         depth = get_redis_value(self.resid, redis_hkey_depth)
         ignores = get_redis_smembers(self.resid, redis_skey_ignores)
-        if debug_mode is True:
+        if debug_mode() is True:
             print('{} {} {} {} {}'.format(self.resid, self.name, link, filetype, depth))
             for i in ignores:
                 print('{} {} ignores {}'.format(self.resid, self.name, i))
@@ -429,7 +429,7 @@ class Site:
                 ignores.update(ignores_all)
 
         interface = filetype if filetype is not None else 'html' 
-        module = import_module('.if' + interface, 'interfaces')
+        module = import_module('.if' + interface, f'{__package__}.interfaces')
         source = module.Source(self.name, self.resid, logger)
         links = source.make_link_set(self.resid, link, depth, ignores)
 
@@ -502,7 +502,7 @@ class Site:
                 hashes = list(get_redis_smembers(self.resid, updated))
 
         if hashes is not None:
-            if debug_mode is True:
+            if debug_mode() is True:
                 print('{} hashes {}'.format(self.name, hashes))
             for h in hashes:
                 n = get_redis_value(h,redis_hkey_name)
@@ -559,7 +559,7 @@ class Site:
                 if len(device_parsed) > 1:
                     args = device_parsed[1]
         try:
-            module = import_module('.if' + interface, 'interfaces')
+            module = import_module('.if' + interface, f'{__package__}.interfaces')
         except ModuleNotFoundError as e:
             print('{}: {} is not a printer device'.format(self.name, interface), file=sys.stderr)
             return False
@@ -679,20 +679,26 @@ class SiteList:
             Site(name).sequences()
 
 def setup_logger(is_debug_mode):
+    global logger
+    global debug_mode
+
+    debug_mode = debug_mode
+
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
     file_handler = logging.FileHandler('./' + os.path.basename(__file__) + '.log')
-    if is_debug_mode:
+    if debug_mode:
         file_handler.setLevel(logging.DEBUG)
     else:
         file_handler.setLevel(logging.WARNING)
-    file_handler.setFormatter(logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s'))
-    logger.addHandler(file_handler)
-
-    return logger
+        file_handler.setFormatter(logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s'))
+        logger.addHandler(file_handler)
 
 def main():
+
+    global logger
+    global debug_mode
 
     import argparse
     import csv
@@ -745,9 +751,8 @@ def main():
         return 1
 
     args = parser.parse_args()
-    debug_mode = args.debug
 
-    logger = setup_logger(debug_mode)
+    setup_logger(args.debug)
 
     if args.subparser_name == 'add':
         Site(args.name[0]).add(args.link[0], args.filetype, int(args.depth))

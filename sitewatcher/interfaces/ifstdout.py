@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from interfaces.ifprinter import BasePrinter
+from sitewatcher.interfaces.ifprinter import BasePrinter
 
 class Printer(BasePrinter):
 

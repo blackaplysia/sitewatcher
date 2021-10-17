@@ -7,7 +7,7 @@ import time
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackClientError, SlackApiError
 
-from interfaces.ifprinter import BasePrinter
+from sitewatcher.interfaces.ifprinter import BasePrinter
 
 class Printer(BasePrinter):
 

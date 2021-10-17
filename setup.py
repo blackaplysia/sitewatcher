@@ -17,7 +17,7 @@ setup(
     install_requires=open('requirements.txt').read().splitlines(),
     entry_points={
         'console_scripts': [
-            'sitewatcher=app.sitewatcher:main',
+            'sitewatcher=sitewatcher.sitewatcher:main'
         ]
     },
     zip_safe=False

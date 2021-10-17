@@ -5,7 +5,7 @@ import hashlib
 import requests
 from urllib.parse import urlparse
 
-from interfaces.ifsource import BaseSource
+from sitewatcher.interfaces.ifsource import BaseSource
 
 class Source(BaseSource):
 
