@@ -3,6 +3,7 @@
 import difflib
 import filetype
 import hashlib
+import io
 import json
 import logging
 import os
@@ -19,10 +20,7 @@ from urllib.parse import urljoin
 logger = None
 debug_mode = False
 
-redis_host = os.environ.get('REDIS_HOST', 'localhost')
-redis_port = os.environ.get('REDIS_PORT', '6379')
-redis_ttl = os.environ.get('REDIS_TTL', '60')
-redis = Redis(host=redis_host, port=redis_port, decode_responses=True)
+redis = None
 
 json_section_data = 'data'
 json_section_config = 'config'
@@ -678,27 +676,19 @@ class SiteList:
             name = get_redis_value(resid, redis_hkey_name)
             Site(name).sequences()
 
-def setup_logger(is_debug_mode):
-    global logger
-    global debug_mode
-
-    debug_mode = debug_mode
-
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-
-    file_handler = logging.FileHandler('./' + os.path.basename(__file__) + '.log')
-    if debug_mode:
-        file_handler.setLevel(logging.DEBUG)
-    else:
-        file_handler.setLevel(logging.WARNING)
-        file_handler.setFormatter(logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s'))
-        logger.addHandler(file_handler)
-
 def main():
 
+    global redis
     global logger
     global debug_mode
+
+    redis_host = os.environ.get('REDIS_HOST', 'localhost')
+    redis_port = os.environ.get('REDIS_PORT', '6379')
+    logs_dir = os.environ.get('LOGS_DIR', '.')
+
+    sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8")
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
     import argparse
     import csv
@@ -711,6 +701,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='Check updating of web sites', formatter_class=SortingHelpFormatter)
     parser.add_argument('--debug', action='store_true', help='debug output')
+    parser.add_argument('--timestamp', action='store_true', help='print timestamp to /dev/stderr')
 
     sps = parser.add_subparsers(dest='subparser_name', title='action arguments')
     sp_add = sps.add_parser('add', help='add a site')
@@ -752,7 +743,23 @@ def main():
 
     args = parser.parse_args()
 
-    setup_logger(args.debug)
+    debug_mode = args.debug
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    file_handler = logging.FileHandler(os.path.join(logs_dir, os.path.basename(__file__) + '.log'))
+    if debug_mode:
+        file_handler.setLevel(logging.DEBUG)
+    else:
+        file_handler.setLevel(logging.WARNING)
+        file_handler.setFormatter(logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s'))
+        logger.addHandler(file_handler)
+
+    if args.timestamp:
+        print('#date ' + datetime.utcfromtimestamp(time.time()).isoformat(), file=sys.stderr)
+
+    redis = Redis(host=redis_host, port=redis_port, decode_responses=True)
 
     if args.subparser_name == 'add':
         Site(args.name[0]).add(args.link[0], args.filetype, int(args.depth))
