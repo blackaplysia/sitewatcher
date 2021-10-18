@@ -1,0 +1,19 @@
+version: '3'
+services:
+  sitewatcher-redis:
+    image: redis:latest
+    container_name: sitewatcher-redis
+  sitewatcher:
+    container_name: sitewatcher
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - REDIS_HOST=sitewatcher-redis
+      - REDIS_PORT=6379
+      - LOGS_DIR=/logs
+      - SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN
+    volumes:
+      - type: bind
+        source: ./logs
+        target: /logs
