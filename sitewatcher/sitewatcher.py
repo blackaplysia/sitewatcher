@@ -756,36 +756,39 @@ def main():
         file_handler.setFormatter(logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s'))
         logger.addHandler(file_handler)
 
+    method = args.subparser_name
+
     if args.timestamp:
-        print('#date ' + datetime.utcfromtimestamp(time.time()).isoformat(), file=sys.stderr)
+        now_isotimestamp = datetime.utcfromtimestamp(time.time()).isoformat()
+        print(f'# {method} {now_isotimestamp}', file=sys.stderr)
 
     redis = Redis(host=redis_host, port=redis_port, decode_responses=True)
 
-    if args.subparser_name == 'add':
+    if method == 'add':
         Site(args.name[0]).add(args.link[0], args.filetype, int(args.depth))
-    elif args.subparser_name == 'delete':
+    elif method == 'delete':
         Site(args.name[0]).delete()
-    elif args.subparser_name == 'rename':
+    elif method == 'rename':
         Site(args.name[0]).rename(args.new_name[0])
-    elif args.subparser_name == 'config':
+    elif method == 'config':
         if args.name is None:
             Site.global_config(args.link, args.filetype, args.depth, args.ignores, args.remove_ignores)
         else:
             SiteList(args.name).config(args.link, args.filetype, args.depth, args.ignores, args.remove_ignores)
-    elif args.subparser_name == 'update':
+    elif method == 'update':
         SiteList(args.name[0]).update()
-    elif args.subparser_name == 'links':
+    elif method == 'links':
         SiteList(args.name[0]).links(args.sequence)
-    elif args.subparser_name == 'print':
+    elif method == 'print':
         device = None if args.device is None else args.device[0]
         SiteList(args.name[0]).print(args.sequence, device)
-    elif args.subparser_name == 'sequences':
+    elif method == 'sequences':
         SiteList(args.name[0]).sequences()
-    elif args.subparser_name == 'list':
+    elif method == 'list':
         SiteList(args.name).list()
-    elif args.subparser_name == 'export':
+    elif method == 'export':
         Site.export_data()
-    elif args.subparser_name == 'import':
+    elif method == 'import':
         Site.import_data()
 
     return 0
