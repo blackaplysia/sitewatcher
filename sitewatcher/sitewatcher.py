@@ -339,7 +339,7 @@ class Site:
         filetype = get_redis_value(self.resid, redis_hkey_filetype)
         depth = get_redis_value(self.resid, redis_hkey_depth)
         ignores = get_redis_smembers(self.resid, redis_skey_ignores)
-        if debug_mode() is True:
+        if debug_mode is True:
             print('{} {} {} {} {}'.format(self.resid, self.name, link, filetype, depth))
             for i in ignores:
                 print('{} {} ignores {}'.format(self.resid, self.name, i))
@@ -500,7 +500,7 @@ class Site:
                 hashes = list(get_redis_smembers(self.resid, updated))
 
         if hashes is not None:
-            if debug_mode() is True:
+            if debug_mode is True:
                 print('{} hashes {}'.format(self.name, hashes))
             for h in hashes:
                 n = get_redis_value(h,redis_hkey_name)
