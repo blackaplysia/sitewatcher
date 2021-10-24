@@ -8,11 +8,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    environment:
-      - REDIS_HOST=sitewatcher-redis
-      - REDIS_PORT=6379
-      - LOGS_DIR=/logs
-      - SLACK_BOT_TOKEN=$SLACK_BOT_TOKEN
+      args:
+        - crontab_template=${CRONTAB_TEMPLATE_PATH:-./sample.crontab_template}
+        - redis_host=sitewatcher-redis
+        - redis_port=6379
+        - logs_dir=/logs
+        - slack_bot_token=${SLACK_BOT_TOKEN}
     volumes:
       - type: bind
         source: ./logs

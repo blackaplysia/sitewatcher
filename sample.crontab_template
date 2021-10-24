@@ -1,0 +1,2 @@
+02,12,22,32,42,52 * * * * /usr/local/bin/sitewatcher --timestamp update all >>/logs/console.log 2>&1
+09,19,29,39,49,59 * * * * /usr/local/bin/sitewatcher --timestamp print all -d slack:notify >>/logs/console.log 2>&1
