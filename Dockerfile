@@ -9,11 +9,6 @@ ARG redis_port
 ARG logs_dir
 ARG slack_bot_token
 
-# local build arguments
-
-ARG crontab_template_path=/etc/sitewatcher-crontab.template
-ARG crontab_path=/etc/cron.d/99sitewatcher
-
 # basic configuration
 
 RUN apt update && \
@@ -39,16 +34,16 @@ ENV SLACK_BOT_TOKEN=${slack_bot_token}
 
 # start cron
 
-COPY ${crontab_template} ${crontab_template_path}
-
-RUN touch ${crontab_path} && \
-    chmod 0644 ${crontab_path} && \
-    echo "REDIS_HOST=${redis_host}" >>${crontab_path} && \
-    echo "REDIS_PORT=${redis_port}" >>${crontab_path} && \
-    echo "LOGS_DIR=${logs_dir}" >>${crontab_path} && \
-    echo "SLACK_BOT_TOKEN=${slack_bot_token}" >>${crontab_path} && \
-    cat <${crontab_template_path} >>${crontab_path} && \
-    crontab ${crontab_path}
+COPY ${crontab_template} /etc
+RUN export crontab_template_basename=$(/usr/bin/basename ${crontab_template}) && \
+    touch /etc/cron.d/99sitewatcher && \
+    chmod 0644 /etc/cron.d/99sitewatcher && \
+    echo "REDIS_HOST=${redis_host}" >>/etc/cron.d/99sitewatcher && \
+    echo "REDIS_PORT=${redis_port}" >>/etc/cron.d/99sitewatcher && \
+    echo "LOGS_DIR=${logs_dir}" >>/etc/cron.d/99sitewatcher && \
+    echo "SLACK_BOT_TOKEN=${slack_bot_token}" >>/etc/cron.d/99sitewatcher && \
+    cat /etc/${crontab_template_basename} >>/etc/cron.d/99sitewatcher && \
+    crontab /etc/cron.d/99sitewatcher
 
 ENTRYPOINT ["tail", "-f", "/logs/console.log"]
 
