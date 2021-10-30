@@ -23,7 +23,7 @@ ENV LC_ALL ja_JP.UTF-8
 RUN git clone https://github.com/mkyutani/sitewatcher.git
 RUN cd sitewatcher && \
     pip3 install .
-RUN mkdir /logs
+RUN mkdir ${logs_dir}
 
 # environment variables
 
@@ -45,5 +45,4 @@ RUN export crontab_template_basename=$(/usr/bin/basename ${crontab_template}) &&
     cat /etc/${crontab_template_basename} >>/etc/cron.d/99sitewatcher && \
     crontab /etc/cron.d/99sitewatcher
 
-ENTRYPOINT ["tail", "-f", "/logs/console.log"]
-
+ENTRYPOINT /bin/sh -c "touch ${logs_dir}/console.log && tail -f ${logs_dir}/console.log"
