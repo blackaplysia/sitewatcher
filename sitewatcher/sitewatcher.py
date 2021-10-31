@@ -32,6 +32,7 @@ redis_skey_index = 'index'
 redis_skey_ignores = 'ignores'
 redis_skey_hashes = 'hashes'
 redis_skey_latests = 'latests'
+redis_skey_variables = 'variables'
 
 redis_lkey_updated = 'updated'
 redis_lmax_updated = 10
@@ -130,6 +131,36 @@ def get_redis_smembers(resid, skey):
 def delete_redis_set(resid, skey):
     redis.delete(resid + '+' + skey)
 
+def set_redis_variable(resid, var, value):
+    redis.hset(resid + '+' + redis_skey_variables, var, value)
+
+def get_redis_variable(resid, var):
+    return redis.hget(resid + '+' + redis_skey_variables, var)
+
+def get_redis_variables(resid):
+    return redis.hgetall(resid + '+' + redis_skey_variables)
+
+def delete_redis_variable(resid, var):
+    redis.hdel(resid + '+' + redis_skey_variables, var)
+
+def delete_redis_variables(resid):
+    redis.delete(resid + '+' + redis_skey_variables)
+
+def set_redis_global_variable(var, value):
+    redis.hset(redis_skey_variables, var, value)
+
+def get_redis_global_variable(var):
+    return redis.hget(redis_skey_variables, var)
+
+def get_redis_global_variables():
+    return redis.hgetall(redis_skey_variables)
+
+def delete_redis_global_variable(var):
+    redis.hdel(redis_skey_variables, var)
+
+def delete_redis_global_variables():
+    redis.delete(redis_skey_variables)
+
 def dump_redis_data():
     index = redis.smembers(redis_skey_index)
     if index is None:
@@ -139,6 +170,9 @@ def dump_redis_data():
     ignores = redis.smembers(redis_skey_ignores)
     if ignores is not None:
         global_config.update({ redis_skey_ignores: list(ignores) })
+    variables = redis.hgetall(redis_skey_variables)
+    if variables is not None:
+        global_config.update({ redis_skey_variables: variables })
 
     global_data = {}
     for n in index:
@@ -159,6 +193,9 @@ def dump_redis_data():
         ignores = redis.smembers(resid + '+' + redis_skey_ignores)
         if ignores is not None:
             config.update({ redis_skey_ignores: list(ignores) })
+        variables = redis.hgetall(resid + '+' + redis_skey_variables)
+        if variables is not None:
+            config.update({ redis_skey_variables: variables })
 
         links = {}
         hashes = redis.smembers(resid + '+' + redis_skey_hashes)
@@ -209,6 +246,9 @@ def load_redis_data(json):
     ignores = global_config[redis_skey_ignores]
     for i in ignores:
         redis.sadd(redis_skey_ignores, i)
+    variables = global_config[redis_skey_variables]
+    for k, v in variables.items():
+        redis.hset(redis_skey_variables, k, v)
 
     for site in global_data:
         header = global_data[site][json_section_header]
@@ -228,6 +268,9 @@ def load_redis_data(json):
         ignores = config[redis_skey_ignores]
         for i in ignores:
             redis.sadd(resid + '+' + redis_skey_ignores, i)
+        variables = config[redis_skey_variables]
+        for k, v in variables.items():
+            redis.hset(resid + '+' + redis_skey_variables, k, v)
 
         updated = global_data[site][json_section_updated]
         for sequence in updated:
@@ -347,6 +390,37 @@ class Site:
             print('{} {} {} {}'.format(self.name, link, filetype, depth))
             for i in ignores:
                 print('{} ignores {}'.format(self.name, i))
+
+        return True
+
+    def set_variable(self, var, val):
+        if self.exists == False:
+            print('{}: no such a site'.format(self.name), file=sys.stderr)
+            return False
+
+        if val is not None:
+            set_redis_variable(self.resid, var, val)
+        else:
+            delete_redis_variable(self.resid, var)
+
+        if debug_mode is True:
+            print('{} {} {} {}'.format(self.resid, self.name, var, val))
+        else:
+            print('{} {} {}'.format(self.name, var, val))
+
+        return True
+
+    def print_variables(self):
+        if self.exists == False:
+            print('{}: no such a site'.format(self.name), file=sys.stderr)
+            return False
+
+        variables = get_redis_variables(self.resid)
+        for k, v in variables.items():
+            if debug_mode is True:
+                print('{} {} {} {}'.format(self.resid, self.name, k, v))
+            else:
+                print('{} {} {}'.format(self.name, k, v))
 
         return True
 
@@ -594,7 +668,22 @@ class Site:
                 remove_redis_ignores(r)
 
         for i in get_redis_ignores():
-            print('global_config ignores {}'.format(i))
+            print('global ignores {}'.format(i))
+
+    @classmethod
+    def global_set_variable(cls, var, val):
+        if val is not None:
+            set_redis_global_variable(var, val)
+        else:
+            delete_redis_global_variable(var)
+
+        print('global {} {}'.format(var, val))
+
+    @classmethod
+    def global_print_variable(cls):
+        variables = get_redis_global_variables()
+        for k, v in variables.items():
+            print('global {} {}'.format(k, v))
 
     @classmethod
     def export_data(cls):
@@ -619,12 +708,16 @@ class Site:
 class SiteList:
 
     def __init__(self, name_template=None):
+        self.site_name_list = None
+        self.global_op = False
         if name_template is None:
             self.site_name_list = sorted(list(get_redis_names()))
         else:
             name_template_lower = name_template.lower()
             if name_template_lower == 'all':
                 self.site_name_list = sorted(list(get_redis_names()))
+            elif name_template_lower == 'global':
+                self.global_op = True
             else:
                 all_name_list = sorted(list(get_redis_names()))
                 name_list = []
@@ -646,10 +739,31 @@ class SiteList:
                 print('{} {} {} {}'.format(name, link, filetype, depth))
 
     def config(self, linkv=None, filetypev=None, depthv=None, ignoresv=None, recognizev=None):
-        for s in self.site_name_list:
-            resid = get_redis_resid(s)
-            name = get_redis_value(resid, redis_hkey_name)
-            Site(name).config(linkv, filetypev, depthv, ignoresv, recognizev)
+        if self.global_op == True:
+            Site.global_config(args.link, args.filetype, args.depth, args.ignores, args.remove_ignores)
+        else:
+            for s in self.site_name_list:
+                resid = get_redis_resid(s)
+                name = get_redis_value(resid, redis_hkey_name)
+                Site(name).config(linkv, filetypev, depthv, ignoresv, recognizev)
+
+    def set_variable(self, var, val):
+        if self.global_op == True:
+            Site.global_set_variable(var, val)
+        else:
+            for s in self.site_name_list:
+                resid = get_redis_resid(s)
+                name = get_redis_value(resid, redis_hkey_name)
+                Site(name).set_variable(var, val)
+
+    def print_variables(self):
+        if self.global_op == True:
+            Site.global_print_variable()
+        else:
+            for s in self.site_name_list:
+                resid = get_redis_resid(s)
+                name = get_redis_value(resid, redis_hkey_name)
+                Site(name).print_variables()
 
     def update(self):
         now = time.time()
@@ -721,6 +835,15 @@ def main():
     sp_config.add_argument('--depth', '-d', nargs=1, metavar='N', help='depth')
     sp_config.add_argument('--ignores', '-i', action='append', metavar='URL', help='add to ignore list')
     sp_config.add_argument('--remove-ignores', '-r', action='append', metavar='URL', help='remove from ignore list')
+    sp_set = sps.add_parser('set', help='set a variable')
+    sp_set.add_argument('name', nargs=1, metavar='NAME', help='site name')
+    sp_set.add_argument('var', nargs=1, metavar='VAR', help='variable')
+    sp_set.add_argument('value', nargs=1, metavar='VALUE', help='value')
+    sp_unset = sps.add_parser('unset', help='unset a variable')
+    sp_unset.add_argument('name', nargs=1, metavar='NAME', help='site name')
+    sp_unset.add_argument('var', nargs=1, metavar='VAR', help='variable')
+    sp_variables = sps.add_parser('variables', help='print variables')
+    sp_variables.add_argument('name', nargs=1, metavar='NAME', help='site name')
     sp_update = sps.add_parser('update', help='update a site or all sites')
     sp_update.add_argument('name', nargs=1, metavar='NAME', help='site name (\'all\' for all sites)')
     sp_links = sps.add_parser('links', help='print all links of a site or all sites')
@@ -771,10 +894,13 @@ def main():
     elif method == 'rename':
         Site(args.name[0]).rename(args.new_name[0])
     elif method == 'config':
-        if args.name is None:
-            Site.global_config(args.link, args.filetype, args.depth, args.ignores, args.remove_ignores)
-        else:
-            SiteList(args.name).config(args.link, args.filetype, args.depth, args.ignores, args.remove_ignores)
+        SiteList(args.name[0]).config(args.link, args.filetype, args.depth, args.ignores, args.remove_ignores)
+    elif method == 'set':
+        SiteList(args.name[0]).set_variable(args.var[0], args.value[0])
+    elif method == 'unset':
+        SiteList(args.name[0]).set_variable(args.var[0], None)
+    elif method == 'variables':
+        SiteList(args.name[0]).print_variables()
     elif method == 'update':
         SiteList(args.name[0]).update()
     elif method == 'links':
