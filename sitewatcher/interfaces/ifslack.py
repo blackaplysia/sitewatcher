@@ -11,16 +11,21 @@ from sitewatcher.interfaces.ifprinter import BasePrinter
 
 class Printer(BasePrinter):
 
-    def __init__(self, args=None):
-        token = os.environ.get('SLACK_BOT_TOKEN')
+    def __init__(self, args=None, variables=None):
+        token = variables.get('slack_bot_token')
+        if token is None:
+            token = os.environ.get('SLACK_BOT_TOKEN')
         self.client = WebClient(token=token)
         self.args = args
+        self.variables = variables
 
     def print(self, title, message, hash=None):
         if self.args is not None:
             channel = '#' + self.args
         else:
-            channel = '#general'
+            channel = self.variables.get('slack_channel')
+            if channel is None:
+                channel = '#general'
 
         try:
             self.client.chat_postMessage(channel=channel, text=' '.join([message]))

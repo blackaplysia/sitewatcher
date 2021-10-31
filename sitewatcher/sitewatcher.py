@@ -134,11 +134,19 @@ def delete_redis_set(resid, skey):
 def set_redis_variable(resid, var, value):
     redis.hset(resid + '+' + redis_skey_variables, var, value)
 
-def get_redis_variable(resid, var):
-    return redis.hget(resid + '+' + redis_skey_variables, var)
+def get_redis_variable(resid, var, override=False):
+    value = redis.hget(resid + '+' + redis_skey_variables, var)
+    if value is None and override is True:
+        value = redis.hget(redis_skey_variables, var)
+    return value
 
-def get_redis_variables(resid):
-    return redis.hgetall(resid + '+' + redis_skey_variables)
+def get_redis_variables(resid, override=False):
+    variables = redis.hgetall(resid + '+' + redis_skey_variables)
+    if override:
+        global_variables = redis.hgetall(redis_skey_variables)
+        global_variables.update(variables)
+        variables = global_variables
+    return variables
 
 def delete_redis_variable(resid, var):
     redis.hdel(resid + '+' + redis_skey_variables, var)
@@ -618,6 +626,8 @@ class Site:
             print('{}: no such a site'.format(self.name), file=sys.stderr)
             return False
 
+        variables = get_redis_variables(self.resid, override=True)
+
         updated = get_redis_list_value(self.resid, redis_lkey_updated, sequence)
 
         module = None
@@ -628,14 +638,14 @@ class Site:
             device_parsed = device.split(':', 1)
             if len(device_parsed) >= 1:
                 interface = device_parsed[0]
-                if len(device_parsed) > 1:
+                if len(device_parsed) > 1 and len(device_parsed[1]) > 0:
                     args = device_parsed[1]
         try:
             module = import_module('.if' + interface, f'{__package__}.interfaces')
         except ModuleNotFoundError as e:
             print('{}: {} is not a printer device'.format(self.name, interface), file=sys.stderr)
             return False
-        printer = module.Printer(args)
+        printer = module.Printer(args, variables)
 
         if updated is not None:
             hashes = list(get_redis_smembers(self.resid, updated))
