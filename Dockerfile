@@ -7,7 +7,6 @@ ARG crontab_template
 ARG redis_host
 ARG redis_port
 ARG logs_dir
-ARG slack_bot_token
 
 # basic configuration
 
@@ -30,7 +29,6 @@ RUN mkdir ${logs_dir}
 ENV REDIS_HOST=${redis_host}
 ENV REDIS_PORT=${redis_port}
 ENV LOGS_DIR=${logs_dir}
-ENV SLACK_BOT_TOKEN=${slack_bot_token}
 
 # start cron
 
@@ -41,7 +39,6 @@ RUN export crontab_template_basename=$(/usr/bin/basename ${crontab_template}) &&
     echo "REDIS_HOST=${redis_host}" >>/etc/cron.d/99sitewatcher && \
     echo "REDIS_PORT=${redis_port}" >>/etc/cron.d/99sitewatcher && \
     echo "LOGS_DIR=${logs_dir}" >>/etc/cron.d/99sitewatcher && \
-    echo "SLACK_BOT_TOKEN=${slack_bot_token}" >>/etc/cron.d/99sitewatcher && \
     cat /etc/${crontab_template_basename} >>/etc/cron.d/99sitewatcher && \
     crontab /etc/cron.d/99sitewatcher
 

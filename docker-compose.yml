@@ -9,12 +9,11 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - crontab_template=${CRONTAB_TEMPLATE}
+        - crontab_template=${CRONTAB_TEMPLATE:-sample.crontab_template}
         - redis_host=sitewatcher-redis
         - redis_port=6379
         - logs_dir=/logs
-        - slack_bot_token=${SLACK_BOT_TOKEN}
     volumes:
       - type: bind
-        source: ${HOST_LOGS_DIR}
+        source: ${HOST_LOGS_DIR:-./logs}
         target: /logs
