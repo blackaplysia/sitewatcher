@@ -373,7 +373,7 @@ class Site:
         if linkv is not None:
             set_redis_value(self.resid, redis_hkey_link, linkv[0])
         if filetypev is not None:
-            if filetypev[0] != 'None':
+            if filetypev[0].lower() != 'none':
                 set_redis_value(self.resid, redis_hkey_filetype, filetypev[0].lower())
             else:
                 delete_redis_value(self.resid, redis_hkey_filetype)
@@ -841,7 +841,7 @@ def main():
     sp_config = sps.add_parser('config', help='configure sites')
     sp_config.add_argument('name', nargs=1, metavar='NAME', help='site name (or \'all\')')
     sp_config.add_argument('--link', '-l', nargs=1, metavar='URL', help='link')
-    sp_config.add_argument('--filetype', '-f', nargs=1, metavar='(CSV)', help='file type (None to remove)')
+    sp_config.add_argument('--filetype', '-f', nargs=1, metavar='(CSV,RSS)', help='file type (NONE to remove)')
     sp_config.add_argument('--depth', '-d', nargs=1, metavar='N', help='depth')
     sp_config.add_argument('--ignores', '-i', action='append', metavar='URL', help='add to ignore list')
     sp_config.add_argument('--remove-ignores', '-r', action='append', metavar='URL', help='remove from ignore list')
