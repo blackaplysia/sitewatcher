@@ -3,6 +3,7 @@
 import csv
 import hashlib
 import requests
+import sys
 from urllib.parse import urlparse
 
 from sitewatcher.interfaces.ifsource import BaseSource

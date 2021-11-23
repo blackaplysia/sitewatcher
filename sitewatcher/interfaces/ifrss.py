@@ -2,6 +2,7 @@
 
 import feedparser
 import hashlib
+import sys
 
 from sitewatcher.interfaces.ifsource import BaseSource
 
@@ -26,7 +27,6 @@ class Source(BaseSource):
         return links
 
 if __name__ == '__main__':
-    import sys
     import pprint
     if len(sys.argv) > 1:
         links = {}
