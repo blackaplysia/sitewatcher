@@ -717,8 +717,8 @@ class Site:
 
 class SiteList:
 
-    def __init__(self, name_template=None):
-        self.site_name_list = None
+    def __init__(self, name_template=None, strict=False):
+        self.site_name_list = []
         self.global_op = False
         if name_template is None:
             self.site_name_list = sorted(list(get_redis_names()))
@@ -730,11 +730,15 @@ class SiteList:
                 self.global_op = True
             else:
                 all_name_list = sorted(list(get_redis_names()))
-                name_list = []
-                for s in all_name_list:
-                    if name_template_lower in s:
-                        name_list.append(s)
-                self.site_name_list = name_list
+                if strict is True:
+                    if name_template_lower in all_name_list:
+                        self.site_name_list = [ name_template_lower ]
+                else:
+                    name_list = []
+                    for s in all_name_list:
+                        if name_template_lower in s:
+                            name_list.append(s)
+                    self.site_name_list = name_list
 
     def list(self):
         for s in self.site_name_list:
@@ -840,6 +844,7 @@ def main():
     sp_rename.add_argument('new_name', nargs=1, metavar='NEW_NAME', help='new name')
     sp_config = sps.add_parser('config', help='configure sites')
     sp_config.add_argument('name', nargs=1, metavar='NAME', help='site name (or \'all\')')
+    sp_config.add_argument('--strict', action='store_true', help='strict name check')
     sp_config.add_argument('--link', '-l', nargs=1, metavar='URL', help='link')
     sp_config.add_argument('--filetype', '-f', nargs=1, metavar='(CSV,RSS)', help='file type (NONE to remove)')
     sp_config.add_argument('--depth', '-d', nargs=1, metavar='N', help='depth')
@@ -847,26 +852,34 @@ def main():
     sp_config.add_argument('--remove-ignores', '-r', action='append', metavar='URL', help='remove from ignore list')
     sp_set = sps.add_parser('set', help='set a variable')
     sp_set.add_argument('name', nargs=1, metavar='NAME', help='site name (or \'all\')')
+    sp_set.add_argument('--strict', action='store_true', help='strict name check')
     sp_set.add_argument('var', nargs=1, metavar='VAR', help='variable')
     sp_set.add_argument('value', nargs=1, metavar='VALUE', help='value')
     sp_unset = sps.add_parser('unset', help='unset a variable')
     sp_unset.add_argument('name', nargs=1, metavar='NAME', help='site name (or \'all\')')
+    sp_unset.add_argument('--strict', action='store_true', help='strict name check')
     sp_unset.add_argument('var', nargs=1, metavar='VAR', help='variable')
     sp_variables = sps.add_parser('variables', help='print variables')
     sp_variables.add_argument('name', nargs=1, metavar='NAME', help='site name (or \'all\')')
+    sp_variables.add_argument('--strict', action='store_true', help='strict name check')
     sp_update = sps.add_parser('update', help='update sites')
     sp_update.add_argument('name', nargs=1, metavar='NAME', help='site name (or \'all\')')
+    sp_update.add_argument('--strict', action='store_true', help='strict name check')
     sp_links = sps.add_parser('links', help='print all links')
     sp_links.add_argument('name', nargs=1, metavar='NAME', help='site name (or \'all\')')
+    sp_links.add_argument('--strict', action='store_true', help='strict name check')
     sp_links.add_argument('--sequence', '-s', default=None, metavar='N', help='time sequence number (0-9, latest=0, all by default)')
     sp_print = sps.add_parser('print', help='print latest links')
     sp_print.add_argument('name', nargs=1, metavar='NAME', help='site name (or \'all\')')
+    sp_print.add_argument('--strict', action='store_true', help='strict name check')
     sp_print.add_argument('--sequence', '-s', default='0', metavar='N', help='time sequence number (0-9, latest=0 by deafult)')
     sp_print.add_argument('--device', '-d', nargs=1, metavar='DEVICE', help='device information like DEVICE:ARGUMENT')
     sp_sequences = sps.add_parser('sequences', help='list time sequences')
     sp_sequences.add_argument('name', nargs=1, metavar='NAME', help='site name (or \'all\')')
+    sp_sequences.add_argument('--strict', action='store_true', help='strict name check')
     sp_list = sps.add_parser('list', help='list sites')
     sp_list.add_argument('name', nargs=1, metavar='NAME', help='site name (or \'all\')')
+    sp_list.add_argument('--strict', action='store_true', help='strict name check')
     sp_export = sps.add_parser('export', help='export database')
     sp_import = sps.add_parser('import', help='import database')
 
@@ -904,24 +917,24 @@ def main():
     elif method == 'rename':
         Site(args.name[0]).rename(args.new_name[0])
     elif method == 'config':
-        SiteList(args.name[0]).config(args.link, args.filetype, args.depth, args.ignores, args.remove_ignores)
+        SiteList(args.name[0], args.strict).config(args.link, args.filetype, args.depth, args.ignores, args.remove_ignores)
     elif method == 'set':
-        SiteList(args.name[0]).set_variable(args.var[0], args.value[0])
+        SiteList(args.name[0], args.strict).set_variable(args.var[0], args.value[0])
     elif method == 'unset':
-        SiteList(args.name[0]).set_variable(args.var[0], None)
+        SiteList(args.name[0], args.strict).set_variable(args.var[0], None)
     elif method == 'variables':
-        SiteList(args.name[0]).print_variables()
+        SiteList(args.name[0], args.strict).print_variables()
     elif method == 'update':
-        SiteList(args.name[0]).update()
+        SiteList(args.name[0], args.strict).update()
     elif method == 'links':
-        SiteList(args.name[0]).links(args.sequence)
+        SiteList(args.name[0], args.strict).links(args.sequence)
     elif method == 'print':
         device = None if args.device is None else args.device[0]
-        SiteList(args.name[0]).print(args.sequence, device)
+        SiteList(args.name[0], args.strict).print(args.sequence, device)
     elif method == 'sequences':
-        SiteList(args.name[0]).sequences()
+        SiteList(args.name[0], args.strict).sequences()
     elif method == 'list':
-        SiteList(args.name[0]).list()
+        SiteList(args.name[0], args.strict).list()
     elif method == 'export':
         Site.export_data()
     elif method == 'import':
