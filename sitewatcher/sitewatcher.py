@@ -894,7 +894,7 @@ def main():
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
-    file_handler = logging.FileHandler(os.path.join(logs_dir, os.path.basename(__file__) + '.log'))
+    file_handler = logging.FileHandler(os.path.join(logs_dir, os.path.basename(__file__) + '.log'), encoding='utf-8')
     if debug_mode:
         file_handler.setLevel(logging.DEBUG)
     else:
