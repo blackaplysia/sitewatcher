@@ -61,8 +61,9 @@ class Source(BaseSource):
     def make_link_set_recursive(self, hash, link, depth, links, ignores):
 
         res = None
+        headers = { 'Cache-Control': 'no-cache' }
         try:
-            res = requests.get(link)
+            res = requests.get(link, headers=headers)
         except requests.exceptions.RequestException as e:
             print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             self.logger.warning('{}: failed to fetch {}'.format(self.name, link))
@@ -76,7 +77,7 @@ class Source(BaseSource):
 
         if res.status_code == 403:
             try:
-                headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36' }
+                headers.update({ 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36' })
                 res = requests.get(link, headers=headers)
             except requests.exceptions.RequestException as e:
                 print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
