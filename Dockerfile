@@ -6,7 +6,6 @@ MAINTAINER "Miki Yutani" mkyutani@gmail.com
 ARG crontab_template
 ARG redis_host
 ARG redis_port
-ARG logs_dir
 
 # basic configuration
 
@@ -22,13 +21,12 @@ ENV LC_ALL ja_JP.UTF-8
 RUN git clone https://github.com/mkyutani/sitewatcher.git
 RUN cd sitewatcher && \
     pip3 install .
-RUN mkdir ${logs_dir}
+RUN mkdir /logs
 
 # environment variables
 
 ENV REDIS_HOST=${redis_host}
 ENV REDIS_PORT=${redis_port}
-ENV LOGS_DIR=${logs_dir}
 
 # start cron
 
@@ -38,8 +36,7 @@ RUN export crontab_template_basename=$(/usr/bin/basename ${crontab_template}) &&
     chmod 0644 /etc/cron.d/99sitewatcher && \
     echo "REDIS_HOST=${redis_host}" >>/etc/cron.d/99sitewatcher && \
     echo "REDIS_PORT=${redis_port}" >>/etc/cron.d/99sitewatcher && \
-    echo "LOGS_DIR=${logs_dir}" >>/etc/cron.d/99sitewatcher && \
     cat /etc/${crontab_template_basename} >>/etc/cron.d/99sitewatcher && \
     crontab /etc/cron.d/99sitewatcher
 
-ENTRYPOINT /bin/sh -c "touch ${logs_dir}/console.log && tail -f ${logs_dir}/console.log"
+ENTRYPOINT /bin/sh -c "touch /logs/console.log && tail -f /logs/console.log"

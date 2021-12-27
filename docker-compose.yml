@@ -15,5 +15,5 @@ services:
         - logs_dir=/logs
     volumes:
       - type: bind
-        source: ${HOST_LOGS_DIR:-./logs}
+        source: ./logs
         target: /logs
