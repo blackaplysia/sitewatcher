@@ -13,32 +13,41 @@ class Printer(BasePrinter):
         if self.webhook is None:
             self.webhook = os.environ.get('TEAMS_INCOMING_WEBHOOK')
 
-    def print(self, title, message, hash=None):
+    def print_all(self, targets, debug_mode=False):
 
-        if self.webhook is None:
-            print(f'No webhook registration for {title}', file=sys.stderr)
-            return
+        name = targets['name']
+        items = []
+        for h, v in targets['hashes'].items():
+            message = v['message']
+            text = v['text']
+            link = v['link']
+            items.append(f'- [{text}]({link})\r')
+
+        contents = [
+            {
+                'text': ''.join(items)
+            }
+        ]
 
         data = {
             'type': 'message',
             'attachments': [
                 {
-                    'contentType': 'application/vnd.microsoft.card.adaptive',
-                    'contentUrl': None,
+                    'contentType': 'application/vnd.microsoft.teams.card.o365connector',
                     'content': {
-                        '$schema': 'http://adaptivecards.io/schemas/adaptive-card.json',
-                        'type':'AdaptiveCard',
-                        'version':'1.2',
-                        'body': [
-                            {
-                                'type': 'TextBlock',
-                                'text': f'{message}'
-                            }
-                        ]
+                        '@type': 'MessageCard',
+                        '@context': 'https://schema.org/extensions',
+                        'summary': f'{name}',
+                        'title': f'{name}',
+                        'sections': contents
                     }
                 }
             ]
         }
+
+        if self.webhook is None:
+            print(f'No webhook registration for {title}', file=sys.stderr)
+            return
 
         res = None
         try:
@@ -51,3 +60,4 @@ class Printer(BasePrinter):
         if res is not None:
             if res.status_code >= 400:
                 print(f'Webhook {res.status_code}', file=sys.stderr)
+

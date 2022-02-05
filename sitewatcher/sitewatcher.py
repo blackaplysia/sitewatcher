@@ -655,14 +655,25 @@ class Site:
             if hashes is not None:
                 if debug_mode is True:
                     print('hashes: {}'.format(hashes), file=sys.stderr)
+                targets = {
+                    'name': self.name,
+                    'hashes': {}
+                }
                 for h in hashes:
                     tag = get_redis_value(h, redis_hkey_tag)
+                    text = get_redis_value(h, redis_hkey_name)
+                    link = get_redis_value(h, redis_hkey_link)
                     if tag is None:
                         tag = 'obsolete'
-                    if debug_mode is True:
-                        printer.print(self.name, tag, h)
-                    else:
-                        printer.print(self.name, tag)
+                    targets['hashes'].update({
+                        h: {
+                            'message': tag,
+                            'text': text,
+                            'link': link
+                        }
+                    })
+                if len(targets['hashes']) > 0:
+                    printer.print_all(targets, debug_mode)
 
     @classmethod
     def global_config(cls, linkv, filetypev, depthv, ignoresv, recognizev):
