@@ -37,8 +37,6 @@ class Printer(BasePrinter):
                     'content': {
                         '@type': 'MessageCard',
                         '@context': 'https://schema.org/extensions',
-                        'summary': f'{name}',
-                        'title': f'{name}',
                         'sections': contents
                     }
                 }
