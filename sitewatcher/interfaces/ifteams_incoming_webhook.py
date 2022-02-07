@@ -46,7 +46,7 @@ class Printer(BasePrinter):
         }
 
         if self.webhook is None:
-            print(f'No webhook registration for {title}', file=sys.stderr)
+            print(f'No webhook registration for {name}', file=sys.stderr)
             return
 
         res = None
@@ -57,7 +57,8 @@ class Printer(BasePrinter):
             print(e, file=sys.stderr)
             return
 
-        if res is not None:
-            if res.status_code >= 400:
-                print(f'Webhook {res.status_code}', file=sys.stderr)
+        if res is None:
+            print(f'Webhook {name} None', file=sys.stderr)
+        else:
+            print(f'Webhook {name} {res.status_code}', file=sys.stderr)
 
