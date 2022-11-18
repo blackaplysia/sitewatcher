@@ -61,3 +61,5 @@ class Source(BaseSource):
         else:
             return self.get_links(text)
 
+    def use_tag_title(self):
+        return True

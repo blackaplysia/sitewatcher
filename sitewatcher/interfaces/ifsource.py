@@ -9,3 +9,6 @@ class BaseSource:
 
     def make_link_set(self, hash, link, depth, ignores):
         return None
+
+    def use_tag_title(self):
+        return False

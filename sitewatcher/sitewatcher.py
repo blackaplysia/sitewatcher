@@ -527,15 +527,20 @@ class Site:
             logger.debug('{}: obsoletes: {}'.format(self.name, obsoletes))
 
             if len(latests) > 0:
+                if source.use_tag_title():
+                    logger.debug('Using tags as titles')
                 for h in latests:
-                    parent_name = None
-                    parent = links[h]['parent']
-                    if parent is not None:
-                        if parent not in links:
-                            parent_name = self.name
-                        else:
-                            parent_name = links[parent]['name']
-                    title = self.get_title(links[h]['name'], links[h]['link'], parent_name)
+                    if source.use_tag_title():
+                        title = links[h]['tag']
+                    else:
+                        parent_name = None
+                        parent = links[h]['parent']
+                        if parent is not None:
+                            if parent not in links:
+                                parent_name = self.name
+                            else:
+                                parent_name = links[parent]['name']
+                        title = self.get_title(links[h]['name'], links[h]['link'], parent_name)
                     if len(title) > 0:
                         links[h]['name'] = title
                         links[h]['tag'] = title + ' ---- ' + links[h]['link']
@@ -911,7 +916,7 @@ def main():
     else:
         file_handler.setLevel(logging.WARNING)
         file_handler.setFormatter(logging.Formatter('%(asctime)s %(name)-12s %(levelname)-8s %(message)s'))
-        logger.addHandler(file_handler)
+    logger.addHandler(file_handler)
 
     method = args.subparser_name
 
