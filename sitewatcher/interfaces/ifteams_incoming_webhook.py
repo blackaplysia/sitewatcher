@@ -16,47 +16,59 @@ class Printer(BasePrinter):
     def print_all(self, targets, debug_mode=False):
 
         name = targets['name']
+        all_items = []
         items = []
+        count = 0
         for h, v in targets['hashes'].items():
             message = v['message']
             text = v['text']
             link = v['link']
             items.append(f'- [{text}]({link})\r')
+            count = count + 1
+            if count > 10:
+                all_items.append(items)
+                items = []
+                count = 0
+        if len(items) > 0:
+            all_items.append(items)
 
-        contents = [
-            {
-                'text': ''.join(items)
-            }
-        ]
 
-        data = {
-            'type': 'message',
-            'attachments': [
+        for items in all_items:
+
+            contents = [
                 {
-                    'contentType': 'application/vnd.microsoft.teams.card.o365connector',
-                    'content': {
-                        '@type': 'MessageCard',
-                        '@context': 'https://schema.org/extensions',
-                        'sections': contents
-                    }
+                    'text': ''.join(items)
                 }
             ]
-        }
 
-        if self.webhook is None:
-            print(f'No webhook registration for {name}', file=sys.stderr)
-            return
+            data = {
+                'type': 'message',
+                'attachments': [
+                    {
+                        'contentType': 'application/vnd.microsoft.teams.card.o365connector',
+                        'content': {
+                            '@type': 'MessageCard',
+                            '@context': 'https://schema.org/extensions',
+                            'title': f'New items found: {name}',
+                            'sections': contents
+                        }
+                    }
+                ]
+            }
 
-        res = None
-        try:
-            res = requests.post(self.webhook, json=data)
-        except Exception as e:
-            print(f'Webhook {type(e).__name__}: failed to send message ({message[0:32]})', file=sys.stderr)
-            print(e, file=sys.stderr)
-            return
+            if self.webhook is None:
+                print(f'No webhook registration for {name}', file=sys.stderr)
+                return
 
-        if res is None:
-            print(f'Webhook {name} None', file=sys.stderr)
-        else:
-            print(f'Webhook {name} {res.status_code}', file=sys.stderr)
+            res = None
+            try:
+                res = requests.post(self.webhook, json=data)
+            except Exception as e:
+                print(f'Webhook {type(e).__name__}: failed to send message ({message[0:32]})', file=sys.stderr)
+                print(e, file=sys.stderr)
+
+            if res is None:
+                print(f'Webhook {name} None', file=sys.stderr)
+            else:
+                print(f'Webhook {name} {res.status_code}', file=sys.stderr)
 
