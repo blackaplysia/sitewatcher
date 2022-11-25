@@ -750,9 +750,10 @@ class SiteList:
                     if name_template_lower in all_name_list:
                         self.site_name_list = [ name_template_lower ]
                 else:
+                    re_pattern = re.compile(name_template_lower, re.IGNORECASE)
                     name_list = []
                     for s in all_name_list:
-                        if name_template_lower in s:
+                        if re_pattern.search(s):
                             name_list.append(s)
                     self.site_name_list = name_list
 
