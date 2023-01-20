@@ -28,7 +28,8 @@ class Printer(BasePrinter):
                 channel = '#general'
 
         try:
-            self.client.chat_postMessage(channel=channel, text=' '.join([message]))
+            slack_message = site_name + ' ' + site_link + '\n' + ' '.join([message])
+            self.client.chat_postMessage(channel=channel, text=slack_message)
         except SlackApiError as e:
             if e.response.status_code == 429:
                 delay = int(e.response.headers['Retry-After'])
