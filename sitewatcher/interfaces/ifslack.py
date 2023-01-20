@@ -19,7 +19,7 @@ class Printer(BasePrinter):
         self.args = args
         self.variables = variables
 
-    def print(self, title, message, text, link, hash=None):
+    def print(self, site_name, site_link, message, text, link, hash=None):
         if self.args is not None:
             channel = '#' + self.args
         else:

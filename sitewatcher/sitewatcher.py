@@ -662,6 +662,7 @@ class Site:
                     print('hashes: {}'.format(hashes), file=sys.stderr)
                 targets = {
                     'name': self.name,
+                    'link': get_redis_value(self.resid, redis_hkey_link),
                     'hashes': {}
                 }
                 for h in hashes:

@@ -15,7 +15,8 @@ class Printer(BasePrinter):
 
     def print_all(self, targets, debug_mode=False):
 
-        name = targets['name']
+        site_name = targets['name']
+        site_link = targets['link']
         all_items = []
         items = []
         count = 0
@@ -49,7 +50,7 @@ class Printer(BasePrinter):
                         'content': {
                             '@type': 'MessageCard',
                             '@context': 'https://schema.org/extensions',
-                            'title': f'New items found: {name}',
+                            'title': f'{site_name} {site_link}',
                             'sections': contents
                         }
                     }
@@ -57,7 +58,7 @@ class Printer(BasePrinter):
             }
 
             if self.webhook is None:
-                print(f'No webhook registration for {name}', file=sys.stderr)
+                print(f'No webhook registration for {site_name}', file=sys.stderr)
                 return
 
             res = None
@@ -68,7 +69,7 @@ class Printer(BasePrinter):
                 print(e, file=sys.stderr)
 
             if res is None:
-                print(f'Webhook {name} None', file=sys.stderr)
+                print(f'Webhook {site_name} None', file=sys.stderr)
             else:
-                print(f'Webhook {name} {res.status_code}', file=sys.stderr)
+                print(f'Webhook {site_name} {res.status_code}', file=sys.stderr)
 

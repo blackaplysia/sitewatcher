@@ -6,12 +6,13 @@ class BasePrinter:
         pass
 
     def print_all(self, targets, debug_mode=False):
-        name = targets['name']
+        site_name = targets['name']
+        site_link = targets['link']
         for h, v in targets['hashes'].items():
             if debug_mode is True:
-                self.print(name, v['message'], v['text'], v['link'], h)
+                self.print(site_name, site_link, v['message'], v['text'], v['link'], h)
             else:
-                self.print(name, v['message'], v['text'], v['link'], None)
+                self.print(site_name, site_link, v['message'], v['text'], v['link'], None)
 
-    def print(self, title, message, text, link, hash=None):
+    def print(self, site_name, site_link, message, text, link, hash=None):
         pass
