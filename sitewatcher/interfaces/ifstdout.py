@@ -7,8 +7,8 @@ class Printer(BasePrinter):
     def __init__(self, args=None, variables=None):
         pass
 
-    def print(self, title, message, text, link, hash=None):
+    def print(self, site_name, site_link, message, text, link, hash=None):
         if hash is None:
-            print(' '.join([title, message]))
+            print(' '.join([site_name, message]))
         else:
-            print(' '.join([hash, title, message]))
+            print(' '.join([hash, site_name, message]))

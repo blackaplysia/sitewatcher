@@ -19,7 +19,7 @@ class Printer(BasePrinter):
         self.args = args
         self.variables = variables
 
-    def print(self, title, message, text, link, hash=None):
+    def print(self, site_name, site_link, message, text, link, hash=None):
         if self.args is not None:
             channel = '#' + self.args
         else:
@@ -28,7 +28,8 @@ class Printer(BasePrinter):
                 channel = '#general'
 
         try:
-            self.client.chat_postMessage(channel=channel, text=' '.join([message]))
+            slack_message =  ' '.join([message]) + '\n-- ' + site_name + ' ' + site_link
+            self.client.chat_postMessage(channel=channel, text=slack_message)
         except SlackApiError as e:
             if e.response.status_code == 429:
                 delay = int(e.response.headers['Retry-After'])
