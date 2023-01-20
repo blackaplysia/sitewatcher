@@ -28,7 +28,7 @@ class Printer(BasePrinter):
                 channel = '#general'
 
         try:
-            slack_message = site_name + ' ' + site_link + '\n' + ' '.join([message])
+            slack_message =  ' '.join([message]) + ' - ' + site_name + ' ' + site_link
             self.client.chat_postMessage(channel=channel, text=slack_message)
         except SlackApiError as e:
             if e.response.status_code == 429:
