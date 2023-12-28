@@ -511,6 +511,8 @@ class Site:
         interface = filetype if filetype is not None else 'html' 
         module = import_module('.if' + interface, f'{__package__}.interfaces')
         source = module.Source(self.name, self.resid, logger)
+        if debug_mode:
+            print('{} {} {}'.format(self.name, self.resid, interface), file=sys.stderr)
         links = source.make_link_set(self.resid, link, depth, ignores)
 
         if links is None or len(links) == 0:
