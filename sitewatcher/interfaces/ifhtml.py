@@ -63,7 +63,7 @@ class Source(BaseSource):
         res = None
         headers = { 'Cache-Control': 'no-cache' }
         try:
-            res = requests.get(link, headers=headers)
+            res = requests.get(link, headers=headers, timeout=15)
         except requests.exceptions.RequestException as e:
             print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             self.logger.warning('{}: failed to fetch {}'.format(self.name, link))
