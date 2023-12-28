@@ -436,7 +436,7 @@ class Site:
         title = name
         res = None
         try:
-            res = requests.get(link)
+            res = requests.get(link, timeout=10)
         except requests.exceptions.InvalidSchema as e:
             print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             logger.warning('{}: failed to fetch {}'.format(self.name, link))

@@ -14,7 +14,7 @@ class Source(BaseSource):
 
         res = None
         try:
-            res = requests.get(link)
+            res = requests.get(link, timeout=10)
         except requests.exceptions.RequestException as e:
             print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             logger.warning('{}: failed to fetch {}'.format(self.name, link))
