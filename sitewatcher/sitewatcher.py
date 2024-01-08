@@ -435,8 +435,9 @@ class Site:
     def get_title(self, name, link, parent_name):
         title = name
         res = None
+        headers = { 'Cache-Control': 'no-cache', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36' }
         try:
-            res = requests.get(link, timeout=10)
+            res = requests.get(link, headers=headers, timeout=10)
         except requests.exceptions.InvalidSchema as e:
             print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
             logger.warning('{}: failed to fetch {}'.format(self.name, link))
