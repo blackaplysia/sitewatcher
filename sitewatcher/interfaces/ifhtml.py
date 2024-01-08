@@ -61,7 +61,7 @@ class Source(BaseSource):
     def make_link_set_recursive(self, hash, link, depth, links, ignores):
 
         res = None
-        headers = { 'Cache-Control': 'no-cache' }
+        headers = { 'Cache-Control': 'no-cache', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36' }
         try:
             res = requests.get(link, headers=headers, timeout=10)
         except requests.exceptions.RequestException as e:
@@ -75,21 +75,7 @@ class Source(BaseSource):
             self.logger.debug(e)
             return None
 
-        if res.status_code == 403:
-            try:
-                headers.update({ 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.61 Safari/537.36' })
-                res = requests.get(link, headers=headers, timeout=10)
-            except requests.exceptions.RequestException as e:
-                print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
-                self.logger.warning('{}: failed to fetch {}'.format(self.name, link))
-                self.logger.debug(e)
-                return None
-            except Exception as e:
-                print('{}: failed to fetch {}'.format(self.name, link), file=sys.stderr)
-                self.logger.warning('{}: failed to fetch {}'.format(self.name, link))
-                self.logger.debug(e)
-                return None
-        elif res.status_code >= 400:
+        if res.status_code >= 400:
             print('{}: failed to fetch {}. Status code={}'.format(self.name, link, res.status_code), file=sys.stderr)
             self.logger.warning('{}: failed to fetch {}. Status code={}'.format(self.name, link, res.status_code))
             return None
